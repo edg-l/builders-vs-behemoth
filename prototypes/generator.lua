@@ -18,6 +18,7 @@ local generator_entity = table.deepcopy(data.raw["container"]["steel-chest"])
 generator_entity.name = "bvb-generator"
 generator_entity.minable = { mining_time = 0.5, result = "bvb-generator" }
 generator_entity.max_health = 200 -- placeholder; TBD balance pass
+generator_entity.inventory_size = 1 -- clone inherits steel-chest's 48 slots; not meant to be usable storage
 
 local generator_item = table.deepcopy(data.raw["item"]["steel-chest"])
 generator_item.name = "bvb-generator"

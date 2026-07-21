@@ -34,12 +34,14 @@ data:extend({
   {
     type = "ammo-category",
     name = "bvb-turret-ammo",
+    hidden = true, -- script-internal category; base melee/biological categories are hidden with no icon
   },
 })
 
 local turret_entity = table.deepcopy(data.raw["ammo-turret"]["gun-turret"])
 turret_entity.name = "bvb-turret"
 turret_entity.attack_parameters.ammo_category = "bvb-turret-ammo"
+turret_entity.minable = { mining_time = 0.5, result = "bvb-turret" } -- reset: clone inherits gun-turret result, would mine into a vanilla item
 data:extend({ turret_entity })
 
 local turret_item = table.deepcopy(data.raw["item"]["gun-turret"])

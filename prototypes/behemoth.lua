@@ -30,11 +30,13 @@ data:extend({
   {
     type = "ammo-category",
     name = "bvb-behemoth-weapon",
+    hidden = true, -- script-internal category; base melee/biological categories are hidden with no icon
   },
 })
 
 local behemoth_gun = table.deepcopy(data.raw["gun"]["pistol"])
 behemoth_gun.name = "bvb-behemoth-gun"
+behemoth_gun.flags = nil -- drop pistol's "always-show" flag; this gun is script-only and must stay hidden
 behemoth_gun.hidden = true -- script-managed only; never craftable or hand-loadable
 behemoth_gun.hidden_in_factoriopedia = true
 behemoth_gun.attack_parameters.ammo_category = "bvb-behemoth-weapon"
