@@ -24,6 +24,15 @@ local CONFIG = {
   builder_spawn_position = { x = 0, y = 0 },
   behemoth_spawn_position = { x = 64, y = 0 }, -- offset so it doesn't stack on builders
   spawn_search_radius = 10,
+  -- Items each Builder spawns with so the build-and-defend loop is reachable
+  -- without a tech tree/starting-materials pipeline. Placeholder quantities;
+  -- retune during the balance pass. Item names mirror the prototype/recipe
+  -- names in prototypes/*.lua (intentional cross-stage duplication).
+  builder_starter_kit = {
+    { name = "bvb-generator", count = 1 }, -- placeable economy engine (one-per-builder enforced on placement)
+    { name = "stone-brick", count = 50 }, -- Wall recipe costs 5 each (~10 walls)
+    { name = "iron-gear-wheel", count = 50 }, -- Turret recipe costs 10 each (~5 turrets)
+  },
 }
 
 -- GUI element names (namespaced with `bvb-` to stay out of other mods'/the
@@ -168,8 +177,21 @@ local function spawn_character(player, position)
   player.set_controller({ type = defines.controllers.character, character = character })
 end
 
+-- Gives a freshly-spawned Builder the starter kit so they can immediately
+-- place a Generator and hand-craft Walls/Turrets (no tech/materials pipeline
+-- in the MVP). Inserts into the player's current character inventory.
+local function grant_builder_starter_kit(player)
+  if not player.character then
+    return
+  end
+  for _, stack in ipairs(CONFIG.builder_starter_kit) do
+    player.insert(stack)
+  end
+end
+
 local function spawn_builder(player)
   spawn_character(player, CONFIG.builder_spawn_position)
+  grant_builder_starter_kit(player)
 end
 
 local function spawn_behemoth(player)
