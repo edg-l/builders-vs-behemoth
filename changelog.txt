@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.6
+Date: 2026-07-21
+  Features:
+    - Scripted arenas: each Builder now spawns inside a single-entry defensible pocket (cliff walls, with a water-moat fallback) so the Behemoth is forced to approach through one choke. Deterministic across multiplayer peers and regenerated each match.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.5
 Date: 2026-07-21
   Features:

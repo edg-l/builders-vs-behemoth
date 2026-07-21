@@ -22,6 +22,7 @@ local defenses = require("scripts.defenses")
 local behemoth = require("scripts.behemoth")
 local vision = require("scripts.vision")
 local shop = require("scripts.shop")
+local arena = require("scripts.arena")
 
 -- Single source of truth for the top-level `storage` namespaces this mod
 -- uses (design D3/D9). Each module owns exactly one namespace and may add
@@ -35,9 +36,10 @@ local STORAGE_NAMESPACES = {
   "behemoth",    -- behemoth.lua: stats, upgrade levels, scanner sweep cooldown
   "vision",      -- vision.lua: reveal-helper bookkeeping (active sweeps, etc.)
   "shop",        -- shop.lua: per-player GUI state
+  "arena",       -- arena.lua: per-pocket boundary tracking (cliff entities / reverted tiles)
 }
 
-local MODULES = { match, economy, defenses, behemoth, vision, shop }
+local MODULES = { match, economy, defenses, behemoth, vision, shop, arena }
 
 script.on_init(function()
   for _, namespace in pairs(STORAGE_NAMESPACES) do

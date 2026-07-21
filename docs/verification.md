@@ -241,3 +241,95 @@ these rules going into this phase.
   parameter each (`event` -> `_event`) to silence a real luacheck finding.
 - `docs/verification.md` — this file (new).
 - `README.md` — expanded per task 8.4.
+
+# Verification: arena-generation (task 5.3)
+
+Same method as above (static, dry read-through; no Factorio install on this
+dev machine). Trace against
+`openspec/changes/arena-generation/specs/arena-generation/spec.md`.
+
+| Scenario | Code location | Verdict |
+|---|---|---|
+| Pocket has one entry | `scripts/arena.lua`'s `pocket_perimeter`: builds the closed square perimeter, then omits every segment on the `gap_side` edge within `gap_half_width` of that edge's midpoint, before `place_boundary` (cliff or water) materializes it. | needs-in-engine-check |
+| Generated before play | `scripts/match.lua`'s `start_match`: `arena.generate(builder_indices)` runs before the `for ordinal, player_index in ipairs(builder_indices)` spawn loop. | OK |
+| Boundary blocks the hunter | Native engine collision for the placed `cliff` entities (or `water` tiles in the fallback) — no custom targeting/collision code exists anywhere in `scripts/arena.lua`; relies entirely on the base game's own impassable-terrain behavior. | needs-in-engine-check |
+| Peers agree | `scripts/arena.lua`: every position derives from `(ordinal, count)` alone via `pocket_angle`/`ring_position`/`effective_ring_radius`/`gap_side_for_angle`; no `math.random` or `os.*` call anywhere in the module (`grep -n "math.random\|os\." scripts/arena.lua` returns nothing). | OK |
+| Integrated with ring spawn | `scripts/match.lua`'s `spawn_builder` calls `arena.pocket_center(ordinal, total)` for the character's spawn position — the exact same function `arena.generate` calls for that ordinal's pocket center, so spawn and pocket center are identical by construction (not by coincidence/duplicated math). | OK |
+| Clean restart | `scripts/match.lua`'s `restart_match` calls `arena.clear_boundary()` (destroys every tracked cliff entity in `storage.arena.cliff_entities`; reverts every tile recorded in `storage.arena.original_tiles`) before the next `start_match`'s `arena.generate` runs. | OK |
+
+## Geometry deviation from design.md (flagged, not a gap)
+
+design.md's D4 describes "a ring of cliff segments"; `scripts/arena.lua`
+instead builds an axis-aligned **square** boundary. This is a deliberate
+adaptation, not an oversight: `cliff_orientation` is a closed set of 16
+named values (verified against
+`~/factorio-data-reference/base/prototypes/entity/entity-util.lua`'s
+`cliff_orientation` table — 4 straight, 4 outer-corner, 4 inner-corner, 8
+entrance/"-to-none" endpoints), not a continuous angle, so a many-sided
+circular polygon of cliffs cannot be expressed at all. The shipped base game
+hits the same constraint: `create_moat_for_force` in
+`~/factorio-data-reference/base/script/pvp/pvp.lua` builds a square cliff
+box with a "lengths" loop that omits the segments spanning each opening,
+using the same 16 orientation constants `scripts/arena.lua` reuses. The
+square still satisfies the spec ("enclosed... with exactly one gap"); only
+D4's cosmetic "ring" wording changes, per its own risk note that the
+pocket/gap math must stay swappable if cliff geometry can't cleanly close.
+
+## In-engine test procedure (task 5.3)
+
+Not run — no Factorio install on this dev machine. Run manually on the real
+game or headless server before considering arena-generation verified; do
+not mark 5.3 as verified based on code-reading alone.
+
+**Scenario 1 — pocket has exactly one gap**
+1. Start a match with 1 Builder.
+2. As that Builder, walk the perimeter of your spawn point at roughly
+   `pocket_radius` tiles out.
+
+Expected: cliffs (or water, if `CONFIG.boundary_material == "water"`) form
+a closed square on all 4 sides except exactly one gap (facing back toward
+the ring center `{0,0}`), wide enough to walk (and later wall) through.
+
+**Scenario 2 — boundary blocks the Behemoth**
+1. Once the Behemoth spawns (post head-start), walk it up to a Builder's
+   pocket boundary from outside, away from the gap.
+
+Expected: the Behemoth cannot cross the boundary anywhere except through
+the gap; it must path around to the gap to reach the Builder.
+
+**Scenario 3 — gap is wall-able**
+1. As the Builder, place Wall entities across the gap span.
+
+Expected: Walls place successfully across the full gap width with no
+collision against the boundary terrain, fully sealing the pocket once
+walled.
+
+**Scenario 4 — pockets don't overlap at N builders**
+1. Start a match with a high Builder count (e.g. 8-12) to exercise the
+   overlap guard. Check the server/client log for `[bvb-arena]` messages —
+   `effective_ring_radius` logs whenever it scales the ring radius up to
+   avoid overlap, and again if the Behemoth-exclusion clamp then scales it
+   back down.
+
+Expected: no two Builders' pockets visually intersect; every Builder spawns
+inside their own, fully separate pocket boundary.
+
+**Scenario 5 — restart regenerates cleanly**
+1. Play a match to completion (or force a disconnect that ends it) so
+   `restart_match` runs.
+2. Start a new match.
+
+Expected: no leftover cliffs/water tiles from the previous match's pockets
+remain (cliff mode: `game.surfaces[1].find_entities_filtered({name =
+"cliff"})` outside the new match's pockets should be empty; water mode: the
+old moat's tiles should show their original terrain again); the new match's
+pockets are generated fresh, correctly centered on the new ring positions.
+
+**Scenario 6 — cliff-vs-water decision**
+Run Scenarios 1-5 first with `CONFIG.boundary_material = "cliff"` (the
+shipped default, `scripts/arena.lua`). If cliffs fail to form a clean,
+fully-closed single-gap boundary (orientation mismatches, gaps in the wrong
+place, or cliffs not blocking movement as expected), flip
+`scripts/arena.lua`'s `CONFIG.boundary_material` to `"water"` and re-run
+Scenarios 1-5 to confirm the fallback. Record which material is confirmed
+correct, and any Scenario 1-5 failures found, back into this file once run.

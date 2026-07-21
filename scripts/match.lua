@@ -12,6 +12,7 @@ local economy = require("scripts.economy")
 local defenses = require("scripts.defenses")
 local behemoth = require("scripts.behemoth")
 local shop = require("scripts.shop")
+local arena = require("scripts.arena")
 
 local M = {}
 
@@ -25,13 +26,13 @@ local CONFIG = {
   -- vs Zealot 2 spawns the hunter after ~30-40s).
   behemoth_head_start_ticks = 35 * 60, -- ~35s (source mode: ~30-40s)
   surface_name = "nauvis",
-  builder_spawn_position = { x = 0, y = 0 }, -- center of the Builder spawn ring, see spawn_builder
-  -- Radius of the ring Builders are scattered around at match start (audit
-  -- fix: previously every Builder spawned on top of each other at
-  -- builder_spawn_position, both risking find_non_colliding_position
-  -- failures and defeating the "scatter and hide" design). Placeholder;
-  -- retune during the balance pass alongside the other spawn-layout numbers.
-  builder_spawn_ring_radius = 20,
+  -- The Builder spawn ring's center and radius are now owned by
+  -- arena.lua's CONFIG (ring_center/base_ring_radius) -- spawn_builder below
+  -- gets each Builder's position from arena.pocket_center so a Builder
+  -- always spawns inside their own pocket (arena-generation change), rather
+  -- than this module computing an independent ring position that could
+  -- drift from the pocket's actual (possibly overlap/Behemoth-exclusion
+  -- adjusted) center.
   behemoth_spawn_position = { x = 64, y = 0 }, -- offset so it doesn't stack on builders
   spawn_search_radius = 10,
   -- Items each Builder spawns with so the build-and-defend loop is reachable
@@ -202,15 +203,6 @@ local function spawn_character(player, position)
   return true
 end
 
--- Computes the `index`-th of `count` evenly-spaced points around a circle of
--- `radius` centered on `center` (audit fix: gives each Builder a distinct
--- spawn point instead of all sharing one position). Index-based, not
--- random, so it stays deterministic/synchronized across peers.
-local function ring_position(center, index, count, radius)
-  local angle = (index - 1) * (2 * math.pi / count)
-  return { x = center.x + radius * math.cos(angle), y = center.y + radius * math.sin(angle) }
-end
-
 -- Gives a freshly-spawned Builder the starter kit so they can immediately
 -- place a Generator and hand-craft Walls/Turrets (no tech/materials pipeline
 -- in the MVP). Inserts into the player's current character inventory.
@@ -224,11 +216,12 @@ local function grant_builder_starter_kit(player)
 end
 
 -- Spawns the `ordinal`-th of `total` Builders at its own point around the
--- spawn ring (see ring_position above), then grants the starter kit and
--- prints the role's onboarding objective (audit fix: role objectives were
+-- spawn ring, centered on their own arena pocket (arena.pocket_center; see
+-- that function's own ring math), then grants the starter kit and prints
+-- the role's onboarding objective (audit fix: role objectives were
 -- previously never communicated in-game).
 local function spawn_builder(player, ordinal, total)
-  local position = ring_position(CONFIG.builder_spawn_position, ordinal, total, CONFIG.builder_spawn_ring_radius)
+  local position = arena.pocket_center(ordinal, total)
   if spawn_character(player, position) then
     grant_builder_starter_kit(player)
     player.print({ "bvb-onboard.builder" })
@@ -300,6 +293,10 @@ local function restart_match()
   defenses.reset()
   behemoth.reset()
   shop.reset()
+  -- Tears down every tracked cliff/water boundary (arena-generation change)
+  -- so the next start_match's arena.generate carves fresh pockets onto
+  -- clean terrain instead of leftover boundary terrain from this match.
+  arena.clear_boundary()
   storage.match.phase = "lobby"
   storage.match.role_votes = {}
   storage.match.behemoth_player_index = nil
@@ -404,6 +401,10 @@ local function start_match(clicker_player_index)
   end
   table.sort(builder_indices)
   local builder_count = #builder_indices
+  -- Carve every Builder's single-entry pocket BEFORE anyone spawns
+  -- (arena-generation change), so spawn_builder below places each Builder
+  -- inside their own already-standing boundary.
+  arena.generate(builder_indices)
   for ordinal, player_index in ipairs(builder_indices) do
     local player = game.get_player(player_index)
     -- Skip a Builder who disconnected between resolve_behemoth() above and
