@@ -137,7 +137,7 @@ end
 
 -- Currency income tick (3.5) -------------------------------------------------
 
-function M.on_income_tick(event)
+function M.on_income_tick(_event)
   for player_index, record in pairs(storage.generators) do
     local tier_stats = CONFIG.tiers[record.tier]
     if tier_stats and record.entity and record.entity.valid then

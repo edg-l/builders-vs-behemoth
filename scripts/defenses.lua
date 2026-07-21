@@ -254,7 +254,7 @@ end
 -- (alongside economy.on_income_tick) rather than registering a new
 -- on_nth_tick cadence -------------------------------------------------------
 
-function M.on_ammo_tick(event)
+function M.on_ammo_tick(_event)
   for _, record in pairs(storage.turrets) do
     refill_turret_ammo(record)
   end

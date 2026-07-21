@@ -365,7 +365,7 @@ end
 -- runs first in that handler, so balances are already up to date by the
 -- time this reads them) -- no new tick cadence is registered.
 
-function M.on_balance_tick(event)
+function M.on_balance_tick(_event)
   for _, player in pairs(game.connected_players) do
     local state = storage.shop[player.index]
     if state and state.open then

@@ -352,7 +352,7 @@ end
 
 -- Staggered start (2.4) ------------------------------------------------------
 
-function M.on_countdown_tick(event)
+function M.on_countdown_tick(_event)
   if storage.match.phase ~= "starting" then
     return
   end

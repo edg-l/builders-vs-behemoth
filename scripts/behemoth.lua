@@ -156,7 +156,7 @@ end
 -- on_nth_tick(60) cadence alongside economy.on_income_tick and
 -- defenses.on_ammo_tick, so no new event registration is needed.
 
-function M.on_equip_tick(event)
+function M.on_equip_tick(_event)
   local behemoth_player_index = storage.match.behemoth_player_index
   if not behemoth_player_index then
     return

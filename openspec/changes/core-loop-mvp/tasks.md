@@ -54,7 +54,7 @@
 
 ## 8. Integration and validation
 
-- [ ] 8.1 Confirm all mutable state lives under `storage`; no module-level mutable locals; single permanently-registered `on_nth_tick` branching internally
-- [ ] 8.2 Run luacheck and validate `info.json`; fix findings
-- [ ] 8.3 Manual end-to-end trace against each spec scenario (dry read-through); note the items needing in-engine verification (fog-of-war reveal, wall block, determinism)
-- [ ] 8.4 Write a short README: how to install into Factorio and run on the headless server for playtesting
+- [x] 8.1 Confirm all mutable state lives under `storage`; no module-level mutable locals; single permanently-registered `on_nth_tick` branching internally
+- [x] 8.2 Run luacheck and validate `info.json`; fix findings
+- [x] 8.3 Manual end-to-end trace against each spec scenario (dry read-through); note the items needing in-engine verification (fog-of-war reveal, wall block, determinism)
+- [x] 8.4 Write a short README: how to install into Factorio and run on the headless server for playtesting
