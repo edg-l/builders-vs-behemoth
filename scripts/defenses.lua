@@ -3,7 +3,76 @@
 --
 -- Fills task group 4 (spec: builder-defenses).
 
+local economy = require("scripts.economy")
+
 local M = {}
+
+-- Tunables (placeholders; retune during the first balance pass, see
+-- design.md "Open Questions" -- wall/turret tier counts, costs, and damage
+-- are explicitly called out as TBD numbers, not final).
+--
+-- Walls: genuine prototype-per-tier (see prototypes/walls.lua) -- max_health
+-- is engine-enforced from the prototype, not writable at runtime, so
+-- tier-up is a scripted destroy+create_entity at the same position
+-- (design D5), carrying the health ratio across.
+--
+-- Turrets: ONE shared entity prototype ("bvb-turret"), tier tracked here at
+-- runtime -- mirrors the Generator's script-tracked-tier pattern. Per-tier
+-- damage is baked into the AMMO item the turret is fed (prototypes/
+-- turrets.lua), since that's where the engine enforces damage for an
+-- ammo-turret; tier-up swaps the loaded ammo instead of recreating the
+-- entity, so a Turret's unit_number stays stable across upgrades.
+local CONFIG = {
+  wall_tiers = {
+    [1] = { entity_name = "bvb-wall-1", upgrade_cost = 0, tint = { r = 0.7, g = 0.7, b = 0.7, a = 1 } },
+    [2] = { entity_name = "bvb-wall-2", upgrade_cost = 150, tint = { r = 0.3, g = 0.6, b = 1, a = 1 } },
+    [3] = { entity_name = "bvb-wall-3", upgrade_cost = 350, tint = { r = 1, g = 0.55, b = 0.1, a = 1 } },
+  },
+  wall_tier_by_entity_name = {
+    ["bvb-wall-1"] = 1,
+    ["bvb-wall-2"] = 2,
+    ["bvb-wall-3"] = 3,
+  },
+  -- Placeholder tintable icon for the per-tier recolor overlay (design D6);
+  -- swap for bespoke tier-glow art in the balance pass.
+  wall_overlay_sprite = "virtual-signal/signal-white",
+
+  turret_entity_name = "bvb-turret",
+  turret_tiers = {
+    [1] = { ammo_item_name = "bvb-turret-ammo-1", upgrade_cost = 0, damage = 20 },
+    [2] = { ammo_item_name = "bvb-turret-ammo-2", upgrade_cost = 200, damage = 45 },
+    [3] = { ammo_item_name = "bvb-turret-ammo-3", upgrade_cost = 450, damage = 90 },
+  },
+  -- A Turret's ammo inventory is topped up (never fed by belts/inserters,
+  -- design keeps it script-only) whenever its current ammo count drops
+  -- below this threshold, refilling up to this amount.
+  turret_ammo_refill_threshold = 50,
+  turret_ammo_refill_amount = 200,
+}
+
+-- Small local helpers (private; no other module needs these) ----------------
+
+-- Tops up a turret's ammo inventory with its current tier's ammo so it
+-- never runs dry between control.lua's periodic on_ammo_tick calls.
+-- Turrets never consume ammo via belts/inserters in this mod (design:
+-- script-only supply), so this is the sole ammo source.
+local function refill_turret_ammo(record)
+  if not (record.entity and record.entity.valid) then
+    return
+  end
+  local tier_stats = CONFIG.turret_tiers[record.tier]
+  if not tier_stats then
+    return
+  end
+  local inventory = record.entity.get_inventory(defines.inventory.turret_ammo)
+  if not inventory then
+    return
+  end
+  local current = inventory.get_item_count(tier_stats.ammo_item_name)
+  if current < CONFIG.turret_ammo_refill_threshold then
+    inventory.insert({ name = tier_stats.ammo_item_name, count = CONFIG.turret_ammo_refill_amount })
+  end
+end
 
 function M.on_init()
   -- storage.walls[unit_number] = { entity = LuaEntity, tier = number, overlay = LuaRenderObject }
@@ -17,39 +86,178 @@ end
 -- Placement (4.1, 4.2, 4.5) ---------------------------------------------------
 
 function M.on_built_entity(event)
-  -- TODO(4.2): register a placed Wall (single entity, one HP pool) into
-  -- storage.walls so it blocks the Behemoth at chokes.
-  -- TODO(4.5): register a placed Turret into storage.turrets; native force
-  -- hostility already restricts it to firing on Behemoth-force entities,
-  -- never on builders.
+  local entity = event.entity
+  if not (entity and entity.valid) then
+    return
+  end
+
+  local wall_tier = CONFIG.wall_tier_by_entity_name[entity.name]
+  if wall_tier then
+    -- Single entity, one HP pool (spec: "Wall has a single health pool");
+    -- storage.walls tracks it by unit_number so it blocks the Behemoth at
+    -- chokes just by existing as solid collidable geometry.
+    storage.walls[entity.unit_number] = { entity = entity, tier = wall_tier, overlay = nil }
+    M.redraw_wall_overlay(entity.unit_number)
+    return
+  end
+
+  if entity.name == CONFIG.turret_entity_name then
+    -- Turret belongs to the placing player's force (builders); native force
+    -- hostility (design D2, set up in match.lua) already restricts its
+    -- targeting to Behemoth-force entities and never to builders, so no
+    -- extra target filtering is needed here.
+    storage.turrets[entity.unit_number] = { entity = entity, tier = 1 }
+    refill_turret_ammo(storage.turrets[entity.unit_number])
+  end
 end
 
 -- Death cleanup (supports 4.3, 4.4) ------------------------------------------
 
 function M.on_entity_died(event)
-  -- TODO: drop the wall/turret's storage entry and destroy its recolor
-  -- overlay (LuaRenderObject), if any, when the entity dies.
+  local entity = event.entity
+  if not (entity and entity.unit_number) then
+    return
+  end
+
+  local wall_record = storage.walls[entity.unit_number]
+  if wall_record then
+    if wall_record.overlay then
+      wall_record.overlay.destroy()
+    end
+    storage.walls[entity.unit_number] = nil
+    return
+  end
+
+  if storage.turrets[entity.unit_number] then
+    storage.turrets[entity.unit_number] = nil
+  end
 end
 
 -- Wall upgrade-in-place (4.3), invoked from shop.lua purchase dispatch -------
+-- Signature: defenses.upgrade_wall(player_index, unit_number). Walls aren't
+-- owned by a single builder (unlike the Generator), so the upgrade is paid
+-- for by whichever player is acting in the shop, not the original placer.
+-- Returns `true, new_unit_number` on success (the Wall's unit_number
+-- changes because the tiered-up entity is a newly created one -- callers
+-- must retarget any UI/selection to it), or `false, reason` on rejection
+-- (reason is one of "not-found", "max-tier", "insufficient-funds");
+-- shop.lua owns user notification, so this never prints.
 
-function M.upgrade_wall(unit_number)
-  -- TODO(4.3): apply_upgrade/next_upgrade where possible, else scripted
-  -- destroy+create_entity at the same position carrying over the health
-  -- ratio. Must not open a gap in the choke.
+function M.upgrade_wall(player_index, unit_number)
+  local record = storage.walls[unit_number]
+  if not (record and record.entity and record.entity.valid) then
+    return false, "not-found"
+  end
+
+  local next_tier = record.tier + 1
+  local tier_stats = CONFIG.wall_tiers[next_tier]
+  if not tier_stats then
+    return false, "max-tier"
+  end
+
+  local balance = economy.get_currency(player_index)
+  if balance < tier_stats.upgrade_cost then
+    return false, "insufficient-funds"
+  end
+
+  local old_entity = record.entity
+  local health_ratio = old_entity.health / old_entity.max_health
+  local surface = old_entity.surface
+  local position = old_entity.position
+  local force = old_entity.force
+  local direction = old_entity.direction
+
+  if record.overlay then
+    record.overlay.destroy()
+  end
+  -- Destroy+create happen synchronously within this single call, with no
+  -- game tick simulated in between, so the choke is never actually open to
+  -- the Behemoth (spec: "no gap is opened").
+  old_entity.destroy()
+  local new_entity = surface.create_entity({
+    name = tier_stats.entity_name,
+    position = position,
+    force = force,
+    direction = direction,
+  })
+  if not (new_entity and new_entity.valid) then
+    return false, "create-failed"
+  end
+  new_entity.health = new_entity.max_health * health_ratio
+
+  economy.add_currency(player_index, -tier_stats.upgrade_cost)
+  storage.walls[unit_number] = nil
+  storage.walls[new_entity.unit_number] = { entity = new_entity, tier = next_tier, overlay = nil }
+  M.redraw_wall_overlay(new_entity.unit_number)
+  return true, new_entity.unit_number
 end
 
 -- Per-tier recolor overlay (4.4) ---------------------------------------------
 
 function M.redraw_wall_overlay(unit_number)
-  -- TODO(4.4): destroy the previous LuaRenderObject (if any) and draw a new
-  -- tinted rendering.draw_sprite overlay for the wall's current tier.
+  local record = storage.walls[unit_number]
+  if not (record and record.entity and record.entity.valid) then
+    return
+  end
+  if record.overlay then
+    record.overlay.destroy()
+    record.overlay = nil
+  end
+  local tier_stats = CONFIG.wall_tiers[record.tier]
+  if not tier_stats then
+    return
+  end
+  record.overlay = rendering.draw_sprite({
+    sprite = CONFIG.wall_overlay_sprite,
+    target = { entity = record.entity },
+    tint = tier_stats.tint,
+    surface = record.entity.surface,
+  })
 end
 
 -- Turret upgrade (4.6), invoked from shop.lua purchase dispatch --------------
+-- Signature: defenses.upgrade_turret(player_index, unit_number). Same
+-- payer convention as upgrade_wall: the acting player in the shop pays,
+-- not necessarily the Turret's placer. Unlike Walls, the Turret entity
+-- itself is never recreated (see CONFIG comment above), so unit_number is
+-- stable across upgrades. Returns `true` on success, or `false, reason`
+-- ("not-found", "max-tier", "insufficient-funds"); never prints.
 
-function M.upgrade_turret(unit_number)
-  -- TODO(4.6): affordability check; increase damage for the new tier.
+function M.upgrade_turret(player_index, unit_number)
+  local record = storage.turrets[unit_number]
+  if not (record and record.entity and record.entity.valid) then
+    return false, "not-found"
+  end
+
+  local next_tier = record.tier + 1
+  local tier_stats = CONFIG.turret_tiers[next_tier]
+  if not tier_stats then
+    return false, "max-tier"
+  end
+
+  local balance = economy.get_currency(player_index)
+  if balance < tier_stats.upgrade_cost then
+    return false, "insufficient-funds"
+  end
+
+  economy.add_currency(player_index, -tier_stats.upgrade_cost)
+  record.tier = next_tier
+  local inventory = record.entity.get_inventory(defines.inventory.turret_ammo)
+  if inventory then
+    inventory.clear() -- drop the previous tier's ammo before loading the new tier's
+  end
+  refill_turret_ammo(record)
+  return true
+end
+
+-- Turret ammo top-up, wired from control.lua's existing 60-tick cadence
+-- (alongside economy.on_income_tick) rather than registering a new
+-- on_nth_tick cadence -------------------------------------------------------
+
+function M.on_ammo_tick(event)
+  for _, record in pairs(storage.turrets) do
+    refill_turret_ammo(record)
+  end
 end
 
 return M

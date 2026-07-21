@@ -25,12 +25,12 @@
 
 ## 4. Builder defenses (spec: builder-defenses)
 
-- [ ] 4.1 Define Wall prototypes/tier table (single-entity, per-tier durability) and Turret prototypes/tier table (per-tier damage)
-- [ ] 4.2 Implement Wall placement (single entity, one HP pool) that blocks the Behemoth at chokes
-- [ ] 4.3 Implement Wall upgrade-in-place (apply_upgrade or destroy+recreate at same position, carrying health ratio, no gap opened)
-- [ ] 4.4 Implement per-tier Wall recolor via a `LuaRendering` tinted overlay attached to the entity; destroy+redraw on tier-up
-- [ ] 4.5 Implement Turret placement that auto-fires on Behemoth-force entities and never on builders
-- [ ] 4.6 Implement Turret tier upgrade with affordability check and damage increase
+- [x] 4.1 Define Wall prototypes/tier table (single-entity, per-tier durability) and Turret prototypes/tier table (per-tier damage)
+- [x] 4.2 Implement Wall placement (single entity, one HP pool) that blocks the Behemoth at chokes
+- [x] 4.3 Implement Wall upgrade-in-place (apply_upgrade or destroy+recreate at same position, carrying health ratio, no gap opened)
+- [x] 4.4 Implement per-tier Wall recolor via a `LuaRendering` tinted overlay attached to the entity; destroy+redraw on tier-up
+- [x] 4.5 Implement Turret placement that auto-fires on Behemoth-force entities and never on builders
+- [x] 4.6 Implement Turret tier upgrade with affordability check and damage increase
 
 ## 5. Behemoth combat (spec: behemoth-combat)
 
