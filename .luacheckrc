@@ -25,6 +25,7 @@ read_globals = {
   "defines",    -- runtime constants (defines.events, defines.command, ...)
   "rendering",  -- LuaRendering (draw_sprite, etc.)
   "settings",   -- mod settings API
+  "commands",   -- console command registration API (control.lua's dev-only /bvb-start; arena-generation change)
   "mods",
   "log",
   "table_size",

@@ -47,6 +47,32 @@ Chosen approach:
 - **Optional (deferred hack):** `LuaRendering.draw_rectangle`/`draw_sprite` accept a `forces` filter, so we could paint an opaque per-force overlay over pocket interiors for the hunter only, lifted when the tank enters — a DIY in-game fog. Caveat: cosmetic only (doesn't change what the tank can target/interact with, so it can read incoherently). Only if the visual matters; not a promise.
 - NOT attempting true elevation/LoS occlusion — the engine doesn't model it and the API doesn't expose it.
 
+## Decisions (rework revision — resolving the plan review)
+
+### D8: Vehicle = car-style single-gun, armed via car_ammo
+Tank weapons are a fixed prototype-level `guns` list, not an insertable weapon slot. Clone `tank` for size/armor/look but set `guns = {"bvb-behemoth-gun"}` (drop the stock cannon/MG/flamethrower), and script-manage ammo in `defines.inventory.car_ammo` (vehicles, not `character_guns`). Confirmed against base `car` (`entities.lua`) + tutorial `car_ammo` usage.
+
+### D9: Mobility — void energy source (no fuel)
+The stock tank is a burner and would be immobile without chemical fuel. Override the clone's `energy_source` to `{ type = "void" }` so the hunter always moves and needs no fuel management. (Alternative rejected: topping up `defines.inventory.fuel` each tick — extra bookkeeping for no gameplay value.)
+
+### D10: Max-health upgrades via equipment-grid shield
+`LuaEntity.max_health` isn't writable and `character_health_bonus` is character-only. The tank has an equipment grid; the HP upgrade tiers add/scale native `energy-shield-equipment` (a tested absorb-before-health pool) rather than swapping prototypes on a seated vehicle. Damage/attack-speed stay on the force ammo/gun-speed modifiers; armor stays scripted mitigation.
+
+### D11: Driver-based identity + vehicle win detection
+A `car`-type entity has no `.player`. All Behemoth identity/vision/mitigation/scanner checks resolve the player via `vehicle.get_driver()` and a vehicle-type/entity check, NOT `entity.player`/`player.character`. Win = the Behemoth VEHICLE entity destroyed (track the entity in `storage`), detected via `on_entity_died` on it; the driver is ejected, not killed. Use `on_player_driving_changed_state` to keep the driver seated/tracked. This rewrites the character-only checks in `behemoth.lua` and `match.lua`.
+
+### D12: Bounded surface — floored once at max size, out-of-map void
+Floor the arena ONCE at scenario `on_init` at a fixed MAXIMUM size (not resized per match; only pockets regenerate on restart within it). Build it via the rocket-rush pattern: `MapGenSettings.autoplace_settings.tile` defaulting to `out-of-map` so anything outside the footprint is impassable void, and `request_to_generate_chunks` + `force_generate_chunk_requests` BEFORE `set_tiles`/`create_entity`. The hand-placed outer cliff/water ring is demoted to optional belt-and-suspenders.
+
+### D13: Hub heal (passive) + shop stays global
+The hub's purpose is spawn + heal: passive regen while the Behemoth vehicle is within a radius of the hub center, applied on the existing nth-tick. The shop stays available anywhere (soften D4's "shops here"); it is not location-gated.
+
+### D14: Out-of-bounds fallback
+A periodic sweep teleports any player/vehicle found outside the bounded footprint back inside — a defensive net against a layout/perimeter gap.
+
+### D15: Rollback safety + spike-first
+Keep the existing character-based Behemoth code paths until the tank model is confirmed working in-engine. The load-bearing assumption — tank blocked by cliffs, water, and wall clones — is the FIRST in-engine spike (drive a tank into each) before investing in the vehicle rework. The vehicle `collision_box`/width is a data-stage constant (~1.8 tiles, from stock tank) pulled forward so pocket gaps are sized to a known number.
+
 ## Risks / Trade-offs
 
 - [Vehicle max-health upgrade has no clean force modifier] -> use tiered vehicle prototypes or a scripted absorb pool; verify in-engine; simplest MVP may cap HP upgrades or use overheal.

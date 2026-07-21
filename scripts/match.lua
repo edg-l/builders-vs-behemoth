@@ -25,7 +25,12 @@ local CONFIG = {
   -- spot, place a Generator and start walling. Matches the source mode (Probes
   -- vs Zealot 2 spawns the hunter after ~30-40s).
   behemoth_head_start_ticks = 35 * 60, -- ~35s (source mode: ~30-40s)
-  surface_name = "nauvis",
+  -- Builders/Behemoth spawn on the dedicated bounded arena surface
+  -- (arena-generation change, task 2.4), not nauvis: sourced from
+  -- arena.SURFACE_NAME rather than duplicating the string, so this module
+  -- and arena.lua's own CONFIG.surface_name can never drift apart (mirrors
+  -- the existing pocket_center sharing convention below).
+  surface_name = arena.SURFACE_NAME,
   -- The Builder spawn ring's center and radius are now owned by
   -- arena.lua's CONFIG (ring_center/base_ring_radius) -- spawn_builder below
   -- gets each Builder's position from arena.pocket_center so a Builder
@@ -403,7 +408,13 @@ local function start_match(clicker_player_index)
   local builder_count = #builder_indices
   -- Carve every Builder's single-entry pocket BEFORE anyone spawns
   -- (arena-generation change), so spawn_builder below places each Builder
-  -- inside their own already-standing boundary.
+  -- inside their own already-standing boundary. This is still the OLD
+  -- per-Builder ring-pocket layout (superseded by task group 4's grounded
+  -- hub+pockets rewrite, not yet implemented); it keeps working as-is on
+  -- the new bounded arena surface because arena.lua's fixed floored
+  -- footprint (task 2.3) is sized generously beyond this ring math's own
+  -- maximum radius (see arena.lua's effective_ring_radius clamp against
+  -- CONFIG.behemoth_spawn_position) -- no guard/no-op needed here.
   arena.generate(builder_indices)
   for ordinal, player_index in ipairs(builder_indices) do
     local player = game.get_player(player_index)

@@ -1,6 +1,8 @@
--- scripts/arena.lua -- scripted single-entry defensible pockets: carves one
--- enclosed, single-gap boundary per Builder around their ring spawn point,
--- before the Builder can act, and tears it down on restart.
+-- scripts/arena.lua -- the dedicated bounded arena surface, plus scripted
+-- single-entry defensible pockets on it: creates the surface ONCE at
+-- scenario on_init (task group 2), then carves one enclosed, single-gap
+-- boundary per Builder around their ring spawn point before the Builder can
+-- act, and tears the pockets (not the surface) down on restart.
 --
 -- Fills the arena-generation change (spec: arena-generation).
 --
@@ -22,6 +24,13 @@
 -- pocket/gap math must stay swappable if cliff geometry can't cleanly close.
 
 local M = {}
+
+-- Dedicated bounded arena surface (arena-generation change, design
+-- D2/D12; task group 2). Declared before CONFIG below so CONFIG.surface_name
+-- can reference it directly -- match.lua does the same via M.SURFACE_NAME so
+-- the two can never drift apart (mirrors this file's existing ring_center/
+-- pocket_center sharing convention).
+local SURFACE_NAME = "bvb-arena"
 
 -- Tunables (placeholders; retune during the first balance pass, see
 -- design.md "Open Questions" -- pocket_radius, gap_width, and ring-radius
@@ -52,7 +61,11 @@ local CONFIG = {
   -- pocket boundaries from reaching into the Behemoth's own spawn area.
   behemoth_spawn_position = { x = 64, y = 0 },
   behemoth_exclusion_margin = 8,
-  surface_name = "nauvis", -- mirrors match.lua's CONFIG.surface_name
+  -- All pocket/spawn placement now targets the dedicated bounded arena
+  -- surface (arena-generation change, task 2.4), not nauvis: match.lua
+  -- reads this same SURFACE_NAME via M.SURFACE_NAME for its own
+  -- CONFIG.surface_name.
+  surface_name = SURFACE_NAME,
   water_tile_name = "water", -- verified base tile name (base/prototypes/tile/tiles.lua)
 }
 
@@ -298,11 +311,97 @@ local function place_boundary(surface, segments)
   end
 end
 
+-- Dedicated bounded arena surface (task group 2; design D2/D12) -------------
+--
+-- Created ONCE at scenario on_init, at a fixed MAXIMUM size -- never resized
+-- per match (only the pockets above regenerate on restart, within this
+-- fixed footprint). Numbers here are placeholders, flagged: group 4's
+-- grounded-layout rewrite (hub + more-than-players pockets, scaled to
+-- player count) will very likely need to retune/enlarge this footprint;
+-- it's sized generously above the current ring-pocket math's own maximum
+-- extent (see effective_ring_radius's clamp against
+-- CONFIG.behemoth_spawn_position) so today's pocket placement fits
+-- comfortably inside it in the meantime.
+local FLOOR_TILE_NAME = "refined-concrete" -- verified base tile name (base/prototypes/tile/tiles.lua)
+local FOOTPRINT_HALF_SIZE = 128 -- tiles; floored square spans [-128, 128) on each axis
+local SURFACE_MARGIN = 64 -- extra void beyond the floored footprint, inside the hard map border
+local CHUNK_GENERATE_RADIUS = 5 -- chunks; covers the footprint (128 / 32 = 4 chunks) with a margin chunk
+
+-- Mirrors ~/factorio-data-reference/base/script/rocket-rush/rocket-rush.lua's
+-- `lobby_map_gen_settings`: listing ONLY "out-of-map" under
+-- `autoplace_settings.tile` (with no default fallback) means every
+-- generated chunk's tile is out-of-map -- impassable void -- unless later
+-- overwritten ourselves via set_tiles (floor_footprint below, task 2.3).
+-- `entity`/`decorative` `treat_missing_as_default = false` means nothing
+-- autoplaces on top of that void either, so resources/enemies/decoratives
+-- are suppressed for free (task 2.1); natural cliffs never get a chance to
+-- generate either, since cliff placement rides the same elevation/terrain
+-- pipeline that out-of-map tiles skip -- we place our own cliffs (D5) via
+-- place_cliff_boundary above instead.
+local ARENA_MAP_GEN_SETTINGS = {
+  width = FOOTPRINT_HALF_SIZE * 2 + SURFACE_MARGIN * 2,
+  height = FOOTPRINT_HALF_SIZE * 2 + SURFACE_MARGIN * 2,
+  autoplace_settings = {
+    tile = {
+      treat_missing_as_default = false,
+      settings = {
+        ["out-of-map"] = {},
+      },
+    },
+    entity = { treat_missing_as_default = false },
+    decorative = { treat_missing_as_default = false },
+  },
+}
+
+-- Floors the fixed footprint (task 2.3) with FLOOR_TILE_NAME, once. Built as
+-- a single set_tiles call (matches the Factorio convention of batching a
+-- `tiles` table rather than one call per tile; see rocket-rush's own
+-- tile-loop pattern).
+local function floor_footprint(surface)
+  local tiles = {}
+  for x = -FOOTPRINT_HALF_SIZE, FOOTPRINT_HALF_SIZE - 1 do
+    for y = -FOOTPRINT_HALF_SIZE, FOOTPRINT_HALF_SIZE - 1 do
+      tiles[#tiles + 1] = { name = FLOOR_TILE_NAME, position = { x, y } }
+    end
+  end
+  surface.set_tiles(tiles)
+end
+
+-- Creates the dedicated bounded arena surface (tasks 2.1-2.3; design
+-- D2/D12): bounded void everywhere via MapGenSettings, then the footprint
+-- chunks are force-generated BEFORE the manual floor tiling -- Factorio
+-- requires chunks to exist before set_tiles/create_entity can act on them,
+-- see base/script/wave-defense/wave_defense.lua's own
+-- request_to_generate_chunks + force_generate_chunk_requests before
+-- create_silo/create_wall/create_turrets -- then floored once at the fixed
+-- max size. Idempotent: if the surface already exists (e.g. a dev re-runs
+-- on_init), reuses it rather than erroring.
+local function create_arena_surface()
+  local surface = game.surfaces[SURFACE_NAME]
+  if surface then
+    return surface
+  end
+  surface = game.create_surface(SURFACE_NAME, ARENA_MAP_GEN_SETTINGS)
+  surface.request_to_generate_chunks({ 0, 0 }, CHUNK_GENERATE_RADIUS)
+  surface.force_generate_chunk_requests()
+  floor_footprint(surface)
+  return surface
+end
+
 -- Module API entry points ----------------------------------------------------
+
+-- Exposed so match.lua's CONFIG.surface_name can reference this module's
+-- surface name directly instead of duplicating the string (task 2.4),
+-- keeping the two modules' notion of "the arena surface" from ever drifting
+-- apart.
+M.SURFACE_NAME = SURFACE_NAME
 
 function M.on_init()
   storage.arena.cliff_entities = {} -- array of LuaEntity (cliff material)
   storage.arena.original_tiles = {} -- array of { x, y, name } (water material, for restart revert)
+  -- Dedicated bounded arena surface (task group 2): created ONCE here, at
+  -- scenario on_init, at a fixed max size -- NOT per match (design D12).
+  create_arena_surface()
 end
 
 function M.on_load()
