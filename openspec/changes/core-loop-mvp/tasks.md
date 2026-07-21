@@ -41,9 +41,9 @@
 
 ## 6. Hiding and vision (spec: hiding-vision)
 
-- [ ] 6.1 Configure Behemoth character/unit vision range so scouting is required (no map-wide reveal)
-- [ ] 6.2 Verify (document as a test case) that builder structures outside live vision stay hidden and appear on approach
-- [ ] 6.3 Implement the reveal helper used by Scanner Sweep (`force.chart`) and confirm it exposes hidden structures at scan time
+- [x] 6.1 Configure Behemoth character/unit vision range so scouting is required (no map-wide reveal)
+- [x] 6.2 Verify (document as a test case) that builder structures outside live vision stay hidden and appear on approach
+- [x] 6.3 Implement the reveal helper used by Scanner Sweep (`force.chart`) and confirm it exposes hidden structures at scan time
 
 ## 7. Shop UI (spec: shop-ui)
 
