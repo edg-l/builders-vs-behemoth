@@ -10,3 +10,6 @@
 
 # Lua
 *.luac
+
+# Local working notes
+CLAUDE.md
