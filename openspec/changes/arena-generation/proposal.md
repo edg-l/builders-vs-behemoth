@@ -1,28 +1,29 @@
 ## Why
 
-The core loop is built on hiding and choke-defense, but Builders currently spawn on open terrain with no natural defensible position — nothing channels the Behemoth to a single approach, so "wall the choke" has no choke to wall. The source mode (Probes vs Zealot 2) gives each mouse a base reachable by one ramp. Factorio has no elevation, but scripted terrain can carve the same shape. This change generates, at match start, a single-entry defensible pocket for each Builder.
+The core loop needs a real playfield. Builders currently spawn on open nauvis with no defensible terrain and no bounded search space, so "hide and wall a choke" has neither a place to hide nor a choke to wall, and the hunter could chase into infinite terrain. The source mode (Probes vs Zealot 2) is a bounded arena of many single-entry bases scattered around a central hunter hub. This change builds that: a dedicated bounded arena surface with scattered varying-size single-entry pockets, launched as a proper scenario, hunted by a wide vehicle that the chokes can actually stop.
 
 ## What Changes
 
-- Add a scripted arena generator that runs once at match start (before Builders act), carving one enclosed pocket per Builder, each with exactly **one** entry gap (the choke).
-- Pocket boundaries are made of **cliffs** (impassable, unbreachable by the Behemoth, the thematic "hills" analog), with a **water-moat** fallback documented if cliff grid-placement proves impractical.
-- Integrate with the existing ring spawn: each Builder spawns inside their own pocket, centered on their ring position; the gap faces a consistent direction (e.g. toward the map center where the Behemoth roams).
-- Generation is deterministic (index-based, no runtime randomness) so it is identical across multiplayer peers.
-- Handle restart: regenerate/clean pockets so a new match starts from known terrain.
-- Expose the layout via tunables (pocket radius, gap width, boundary material) with placeholder values.
+- **Restructure to mod + bundled scenario** so the mode launches from "New Game -> Scenarios" and no longer auto-hijacks freeplay.
+- Run the match on a **dedicated bounded arena surface** floored uniformly (`refined-concrete`), free of biters/resources, enclosed by an impassable boundary.
+- Generate a **grounded layout**: a central hunter hub, a shared central Builder spawn (Builders roam out and claim), and **many varying-size single-entry pockets, more than players**, on a hub-distance safety gradient with obscure "ninja" nooks — deterministic across peers, regenerated each match.
+- Make the **Behemoth a ~2-wide ground vehicle** (tank-based, not spidertron) so the "wall the middle, Builders slip the side gaps" choke works; rework its arming/stats/win-detection accordingly.
+- Establish **hiding = physical search + map fog + Scanner Sweep** (true elevation occlusion is not engine-possible; documented and accepted).
 
 ## Capabilities
 
 ### New Capabilities
-- `arena-generation`: scripted, deterministic creation of per-Builder single-entry defensible pockets at match start, their integration with spawn placement, and their teardown/regeneration on restart.
+- `arena-generation`: the scenario entry, the bounded uniform surface, the central hub, Builder spawn/claim, the scattered varying-size single-entry pockets, deterministic generation + restart, and the search/map-fog hiding model.
+- `hunter-vehicle`: the Behemoth as a wide ground vehicle confined to chokes, its armament/upgrade application, and vehicle-based win detection.
 
 ### Modified Capabilities
-<!-- None — this is additive. match-lifecycle calls the new generator but its own requirements are unchanged. -->
+<!-- match-lifecycle and behemoth-combat are affected in implementation (spawn surface, vehicle vs character), but their spec-level intent is unchanged; captured here as the two new capabilities above rather than delta specs, since core-loop-mvp is not yet archived. -->
 
 ## Impact
 
-- **New code:** a `scripts/arena.lua` module; a call from `match.lua`'s match-start path; wiring consistent with the single-registrar pattern if any event is needed.
-- **Factorio APIs:** `LuaSurface.create_entity{name="cliff", cliff_orientation=…}` (grid-snapped, orientation-sensitive) or `LuaSurface.set_tiles` for the water fallback; `LuaSurface.find_entities_filtered`/destroy for cleanup; deterministic index math.
-- **Dependencies:** base game only (cliffs and water are base). No new prototypes required.
-- **Non-goals:** organic map-gen tuning (cliff noise settings), decorative variety, multiple arena layouts, Behemoth-side terrain. Numbers are placeholders to tune in-engine.
-- **Risk:** scripted cliff placement is grid-aligned (4-tile) and orientation-fiddly; the design carries an explicit water-moat fallback if cliffs can't cleanly form a closed single-gap ring at the chosen scale.
+- **New code:** `scenarios/builders-vs-behemoth/control.lua`; a `scripts/main.lua` activation entry; rewritten `scripts/arena.lua`; a tank-based Behemoth prototype.
+- **Reworked:** `control.lua` (no auto-start), `scripts/match.lua` (arena surface, central spawn, vehicle Behemoth, restart), `scripts/behemoth.lua` + `prototypes/behemoth.lua` (vehicle), `scripts/vision.lua` (map-fog hiding).
+- **Factorio APIs:** `create_surface`, `set_tiles`, `create_entity{name="cliff",…}`/water tiles, `LuaForce.chart`/`unchart_chunk`, vehicle gun/ammo inventories, force ammo/gun-speed modifiers, `on_entity_damaged`.
+- **Dependencies:** base game only.
+- **Supersedes** the first arena implementation (uniform per-Builder ring pockets), which is replaced.
+- **Non-goals:** true elevation/LoS occlusion (impossible); the cosmetic render-overlay fog (deferred); multiple map presets; art. Numbers are placeholders.

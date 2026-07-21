@@ -20,6 +20,7 @@ globals = {
 
 read_globals = {
   "data",       -- data-stage prototype table (data.lua, prototypes/*)
+  "prototypes", -- 2.0 runtime prototype lookup global (prototypes.entity, .item, ...)
   "script",     -- event registration API
   "defines",    -- runtime constants (defines.events, defines.command, ...)
   "rendering",  -- LuaRendering (draw_sprite, etc.)

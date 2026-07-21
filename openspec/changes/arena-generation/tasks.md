@@ -1,28 +1,43 @@
-## 1. Arena module scaffold
+## 1. Mod + scenario restructure
 
-- [x] 1.1 Create `scripts/arena.lua` following the module convention (returns table; `on_init` seeds `storage.arena`; no self-registered events); add `storage.arena` to control.lua STORAGE_NAMESPACES and require the module where the others are required
-- [x] 1.2 Add an immutable CONFIG with placeholders: `boundary_material` ("cliff" | "water"), `pocket_radius`, `gap_width`, and ring-radius scaling inputs; flag all as to-tune
+- [ ] 1.1 Move the mode's event-wiring/on_init out of the top-level `control.lua` into a module (e.g. `scripts/main.lua`) that exposes a single activation entry; the mod's `control.lua` no longer auto-starts the mode
+- [ ] 1.2 Add `scenarios/builders-vs-behemoth/control.lua` as a one-line `require` into the activation entry (mirroring base `scenarios/pvp/control.lua`)
+- [ ] 1.3 Verify the mode does NOT run on a plain freeplay world with the mod enabled; add a dev-only console command to launch it manually if desired
 
-## 2. Pocket geometry (material-agnostic)
+## 2. Dedicated arena surface
 
-- [x] 2.1 Implement pocket-center computation from a Builder ordinal + count (reuse the same ring math as `match.lua`'s spawn so pocket and spawn coincide); expose a helper `arena.pocket_center(ordinal, count)`
-- [x] 2.2 Compute the perimeter positions of a pocket and the contiguous gap span (gap direction a deterministic function of the pocket angle, e.g. facing map center); return boundary positions with the gap omitted
-- [x] 2.3 Guard against overlap: if ring spacing < 2*pocket_radius + margin, scale the ring radius up (and `log()` the adjustment) rather than overlapping pockets silently
+- [ ] 2.1 On scenario init, create a dedicated surface with MapGenSettings suppressing enemies, resources, cliffs (we place our own), and decoratives
+- [ ] 2.2 Floor the bounded arena region uniformly with `refined-concrete` via `set_tiles`; leave everything outside ungenerated/void
+- [ ] 2.3 Enclose the region with an impassable boundary (cliffs; water fallback) so the playfield is finite; size the region from player count
+- [ ] 2.4 Move all player spawning onto this surface (replace the nauvis assumption in match.lua)
 
-## 3. Boundary placement (isolated behind one helper)
+## 3. Grounded layout generation (rewrite arena.lua)
 
-- [x] 3.1 Implement `place_boundary(surface, positions)` for the cliff material: create cliff segments with correct `cliff_orientation` per position, snapped to the cliff grid, omitting the gap; track created entities in `storage.arena`
-- [x] 3.2 Implement the water fallback path in the same helper interface: `set_tiles` water on boundary positions (record original tiles for restart), omitting the gap; selectable via `CONFIG.boundary_material`
-- [x] 3.3 Implement `clear_boundary()` : destroy tracked cliff entities and/or revert recorded water tiles to land; clear `storage.arena`
+- [ ] 3.1 Central hunter hub: a fixed hub area at arena center (Behemoth spawn + heal + shop anchor)
+- [ ] 3.2 Central Builder spawn: Builders spawn at a shared central point and are free to roam/claim (remove the per-builder ring assignment)
+- [ ] 3.3 Deterministic scattered pockets, MORE than the player count, chunk-aligned, with varying sizes on a hub-distance safety gradient (exposed near center, larger/safer toward edges, plus obscure off-path nooks); seed from a fixed value, no unsynced randomness
+- [ ] 3.4 Each pocket: single-entry choke sized to the vehicle width (central wall + gap the tank can't pass); reuse the cliff/water boundary helper
+- [ ] 3.5 Overlap/fit guard: ensure pockets don't overlap and fit the bounded region; scale region size and `log()` adjustments
+- [ ] 3.6 Regenerate cleanly on match restart
 
-## 4. Integration
+## 4. Wide tank Behemoth (rework behemoth + prototype)
 
-- [x] 4.1 Add `arena.generate(builder_indices)` that builds a pocket per Builder ordinal and places boundaries; call it from `match.lua`'s start path BEFORE Builders spawn (so they spawn inside their pocket)
-- [x] 4.2 Ensure Builder spawn positions land inside their pocket (adjust spawn to pocket center if needed; keep deterministic)
-- [x] 4.3 Call `arena.clear_boundary()` (or regenerate) on match restart so a new match starts from clean terrain
+- [ ] 4.1 Define the Behemoth vehicle prototype (clone `tank`, ~2 wide, custom weapon on the existing `bvb-behemoth-weapon` ammo category); NOT a spidertron
+- [ ] 4.2 Spawn/enter: seat the Behemoth player in the vehicle at the hub after the grace period (replace character spawn for the Behemoth)
+- [ ] 4.3 Arming: insert weapon/ammo into the vehicle's gun/ammo inventories; keep it idempotent and armed immediately on spawn
+- [ ] 4.4 Stats: damage/attack-speed via force ammo/gun-speed modifiers (unchanged); armor via scripted mitigation on the vehicle; max-health via a vehicle-appropriate mechanism (tiered prototype or scripted absorb pool) — pick one, document it
+- [ ] 4.5 Win detection: track the Behemoth vehicle entity and end the match (Builders win) when it is destroyed; handle the driver being ejected
+- [ ] 4.6 Damage-to-currency: confirm the vehicle's fire still credits currency via on_entity_damaged (cause = the vehicle)
 
-## 5. Verification
+## 5. Hiding (baseline)
 
-- [x] 5.1 Confirm determinism: generation is ordinal-based, no runtime randomness, all state in `storage`
-- [x] 5.2 Run `luac5.4 -p` on all touched Lua and `luacheck .` (0/0)
-- [x] 5.3 Add an in-engine test-case block (to `docs/verification.md`): pocket has exactly one gap, boundary blocks the Behemoth, gap is wall-able, pockets don't overlap at N builders, restart regenerates cleanly — the cliff-vs-water decision is confirmed here
+- [ ] 5.1 Give the Behemoth vehicle a modest vision radius so it must approach/enter pockets to see them
+- [ ] 5.2 Keep Builder base locations off the Behemoth's minimap until observed (map-fog management); confirm Scanner Sweep still reveals via `force.chart`
+- [ ] 5.3 Do NOT implement true in-game occlusion (accepted limitation); leave the per-force render-overlay hack unimplemented, noted as future
+
+## 6. Integration and verification
+
+- [ ] 6.1 Reconcile match.lua: central spawn, arena.generate before spawn, vehicle-based Behemoth, restart clears arena + vehicle + fog state; keep all prior audit fixes intact
+- [ ] 6.2 Determinism: index/seed-based layout, all state in `storage`, no unsynced randomness, single-registrar events
+- [ ] 6.3 `luac5.4 -p` on all Lua + `luacheck .` (0/0); `openspec validate arena-generation`
+- [ ] 6.4 Update `docs/verification.md` with the in-engine checklist: scenario launches, uniform bounded surface, hub, more-pockets-than-players, single-entry chokes block the tank, tank can't slip side gaps, hiding-by-search, restart clean, cliff-vs-water decision

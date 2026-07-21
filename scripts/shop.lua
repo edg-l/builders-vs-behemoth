@@ -86,9 +86,9 @@ local TOP_BALANCE_LABEL_NAME = "bvb-shop-top-balance-label"
 -- Small local helpers (private; build tooltips on demand) -------------------
 --
 -- Tooltips are built LAZILY (called from M.open()'s item loop, never at
--- module-load time) because defenses.get_wall_tier_info() reads
--- `game.entity_prototypes` -- `game` doesn't exist yet while this file's
--- `require`s run at control-stage load, only once inside an event handler.
+-- module-load time) because defenses.get_wall_tier_info() reads the
+-- `prototypes.entity` global, which is only safe to touch inside an event
+-- handler, not while this file's `require`s run at control-stage load.
 -- CONFIG below therefore stores a `tooltip_fn` per item (a plain function
 -- reference; storing it has no side effects) instead of a precomputed
 -- LocalisedString.

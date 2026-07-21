@@ -299,7 +299,8 @@ end
 -- Both return a NEW array (never a live CONFIG table) in tier order.
 --
 -- Wall max_health is read live from the actual entity prototype
--- (`game.entity_prototypes[entity_name].max_health`) rather than a
+-- (`prototypes.entity[entity_name].max_health`; 2.0 global, NOT the removed
+-- 1.1 `game.entity_prototypes`) rather than a
 -- defenses.lua CONFIG mirror of prototypes/walls.lua's WALL_TIER_HEALTH --
 -- no such mirror exists today, and adding one would be a THIRD source of
 -- truth for the same number. Reading the live prototype instead is the
@@ -317,7 +318,7 @@ end
 function M.get_wall_tier_info()
   local info = {}
   for tier, tier_stats in ipairs(CONFIG.wall_tiers) do
-    local prototype = game and game.entity_prototypes[tier_stats.entity_name]
+    local prototype = prototypes.entity[tier_stats.entity_name]
     info[tier] = {
       tier = tier,
       upgrade_cost = tier_stats.upgrade_cost,
