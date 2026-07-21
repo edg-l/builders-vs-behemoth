@@ -34,10 +34,10 @@
 
 ## 5. Behemoth combat (spec: behemoth-combat)
 
-- [ ] 5.1 Define/choose the Behemoth base entity and its upgradable stats (damage, attack speed, armor, max health)
-- [ ] 5.2 Implement damage-to-currency via `on_entity_damaged`, awarding only for damage to `builders`-force structures, proportional to `final_damage_amount`
-- [ ] 5.3 Implement stat-upgrade purchases (damage/attack speed/armor/HP); HP upgrade must not drop current health below its pre-upgrade value
-- [ ] 5.4 Implement Scanner Sweep ability: chart a target area for the Behemoth force with a cooldown enforced via `game.tick`
+- [x] 5.1 Define/choose the Behemoth base entity and its upgradable stats (damage, attack speed, armor, max health)
+- [x] 5.2 Implement damage-to-currency via `on_entity_damaged`, awarding only for damage to `builders`-force structures, proportional to `final_damage_amount`
+- [x] 5.3 Implement stat-upgrade purchases (damage/attack speed/armor/HP); HP upgrade must not drop current health below its pre-upgrade value
+- [x] 5.4 Implement Scanner Sweep ability: chart a target area for the Behemoth force with a cooldown enforced via `game.tick`
 
 ## 6. Hiding and vision (spec: hiding-vision)
 

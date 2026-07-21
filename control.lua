@@ -114,6 +114,7 @@ end)
 script.on_nth_tick(60, function(event)
   economy.on_income_tick(event)
   defenses.on_ammo_tick(event) -- tops up placed Turrets' ammo (builder-defenses 4.5/4.6)
+  behemoth.on_equip_tick(event) -- arms/re-ammos the Behemoth's character (behemoth-combat 5.1/5.3)
 end)
 
 script.on_nth_tick(30, function(event)
