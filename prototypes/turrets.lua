@@ -71,8 +71,8 @@ for tier, damage in ipairs(TURRET_TIER_DAMAGE) do
       stack_size = 200,
       hidden = true, -- script-managed only; never craftable or hand-loadable
       hidden_in_factoriopedia = true,
+      ammo_category = "bvb-turret-ammo", -- 2.0: item-level ammo category (moved out of ammo_type)
       ammo_type = {
-        category = "bvb-turret-ammo",
         target_type = "entity",
         action = {
           type = "direct",
