@@ -183,4 +183,19 @@ function M.add_currency(player_index, amount)
   storage.currency[player_index] = (storage.currency[player_index] or 0) + amount
 end
 
+-- Read-only tier accessor (design D3-adjacent: single source of truth for
+-- shop.lua's tooltips, fixing the previous duplicated-cost-array problem).
+-- Returns a NEW array (never the live CONFIG.tiers table, so a caller can
+-- never mutate the authoritative data) of
+-- { tier, income_per_interval, upgrade_cost } for every generator tier, in
+-- tier order (tier 1 first, the free starting tier).
+
+function M.get_generator_tier_info()
+  local info = {}
+  for tier, tier_stats in ipairs(CONFIG.tiers) do
+    info[tier] = { tier = tier, income_per_interval = tier_stats.income_per_interval, upgrade_cost = tier_stats.upgrade_cost }
+  end
+  return info
+end
+
 return M

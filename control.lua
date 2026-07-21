@@ -100,6 +100,13 @@ script.on_event(defines.events.on_player_left_game, function(event)
   match.on_player_left_game(event)
 end)
 
+-- Eliminated-builder respawn race (audit fix): re-forces spectator if the
+-- base game's own respawn flow puts an already-eliminated player back into
+-- a character (capability: match-lifecycle).
+script.on_event(defines.events.on_player_respawned, function(event)
+  match.on_player_respawned(event)
+end)
+
 -- Behemoth combat (capability: behemoth-combat) ------------------------------
 
 script.on_event(defines.events.on_entity_damaged, function(event)

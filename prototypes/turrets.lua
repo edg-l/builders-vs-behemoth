@@ -42,6 +42,13 @@ local turret_entity = table.deepcopy(data.raw["ammo-turret"]["gun-turret"])
 turret_entity.name = "bvb-turret"
 turret_entity.attack_parameters.ammo_category = "bvb-turret-ammo"
 turret_entity.minable = { mining_time = 0.5, result = "bvb-turret" } -- reset: clone inherits gun-turret result, would mine into a vanilla item
+-- Audit fix: block blueprint capture/robot (re)construction so the
+-- storage.turrets tracking in scripts/defenses.lua can't be bypassed;
+-- appended, not overwritten, so the base game's "placeable-player"/
+-- "player-creation" flags the clone carries are preserved. Hand-mining is
+-- unaffected -- it's governed by `minable` above, not by these flags.
+table.insert(turret_entity.flags, "not-blueprintable")
+table.insert(turret_entity.flags, "not-deconstructable")
 data:extend({ turret_entity })
 
 local turret_item = table.deepcopy(data.raw["item"]["gun-turret"])

@@ -34,6 +34,35 @@
 -- world position (falling back to `player.position`) as `target_position`,
 -- matching design D7/behemoth.lua's own suggestion ("MVP may sweep around
 -- the Behemoth's own position").
+--
+-- Shop/UX pass (post-MVP): three fixes layered on top of the above.
+--
+-- FIX A (single source of truth for costs/effects): the dead
+-- `*_upgrade_costs` display-only arrays and inline tooltip literals are
+-- gone. Tooltips now read economy.get_generator_tier_info(),
+-- defenses.get_wall_tier_info()/get_turret_tier_info(), and
+-- behemoth.get_stat_tier_info() -- small read-only accessors added to those
+-- modules that return a NEW array copy of their own CONFIG's per-tier cost
+-- (and, where available, effect) data. Currency is still deducted
+-- exclusively by those same modules' upgrade_*/scanner_sweep functions;
+-- this file never touches storage.currency directly.
+--
+-- FIX B (tooltips show effects, not just costs): each tile's tooltip now
+-- has an optional third line (cost ladder, then effect ladder) built by the
+-- tooltip_fn on each CONFIG item -- see "Small local helpers" below for why
+-- tooltips are built lazily rather than baked into CONFIG at module-load
+-- time. Turret has no effect line (see get_turret_tier_info's doc comment
+-- in defenses.lua for why its damage-per-tier can't be sourced from an
+-- accessor without a second source of truth).
+--
+-- FIX C (persistent top-of-screen balance label): a second, always-visible
+-- label in `player.gui.top` (TOP_BALANCE_LABEL_NAME), separate from the
+-- shop panel's own in-frame balance label, shown for any player currently
+-- holding a role in an in-progress match (see in_match_role/
+-- refresh_top_balance_label below). No new storage is needed -- visibility
+-- and value are both derived fresh from storage.match/storage.currency on
+-- every refresh, so it stays deterministic across peers without its own
+-- persisted state.
 
 local economy = require("scripts.economy")
 local defenses = require("scripts.defenses")
@@ -50,59 +79,127 @@ local CLOSE_BUTTON_NAME = "bvb-shop-close-button"
 local BALANCE_LABEL_NAME = "bvb-shop-balance-label"
 local NO_ROLE_LABEL_NAME = "bvb-shop-no-role-label"
 local ITEMS_FLOW_NAME = "bvb-shop-items-flow"
+-- Persistent top-of-screen balance readout (separate from the toggleable
+-- shop panel above; see refresh_top_balance_label's doc comment below).
+local TOP_BALANCE_LABEL_NAME = "bvb-shop-top-balance-label"
 
--- Small local helpers (private; build the immutable CONFIG below) ----------
+-- Small local helpers (private; build tooltips on demand) -------------------
+--
+-- Tooltips are built LAZILY (called from M.open()'s item loop, never at
+-- module-load time) because defenses.get_wall_tier_info() reads
+-- `game.entity_prototypes` -- `game` doesn't exist yet while this file's
+-- `require`s run at control-stage load, only once inside an event handler.
+-- CONFIG below therefore stores a `tooltip_fn` per item (a plain function
+-- reference; storing it has no side effects) instead of a precomputed
+-- LocalisedString.
 
--- Builds a two-line LocalisedString tooltip: the item's display name, then
--- its upgrade-cost ladder. `costs` is a plain array of upgrade_cost numbers
--- mirroring the owning module's tier table (see CONFIG's cost-list comment
--- below); only 2- and 3-tier ladders occur in this mod's current data.
-local function upgrade_tooltip(name_locale, costs)
-  local cost_line
+-- Builds the upgrade-cost-ladder line, reusing the existing 2-/3-tier
+-- locale keys (only 2- and 3-cost ladders occur in this mod's current
+-- data: costs excludes each item's free tier-1 baseline).
+local function cost_line(costs)
   if #costs >= 3 then
-    cost_line = { "bvb-shop.upgrade-cost-3", tostring(costs[1]), tostring(costs[2]), tostring(costs[3]) }
-  else
-    cost_line = { "bvb-shop.upgrade-cost-2", tostring(costs[1]), tostring(costs[2]) }
+    return { "bvb-shop.upgrade-cost-3", tostring(costs[1]), tostring(costs[2]), tostring(costs[3]) }
   end
-  return { "", name_locale, "\n", cost_line }
+  return { "bvb-shop.upgrade-cost-2", tostring(costs[1]), tostring(costs[2]) }
 end
 
--- Immutable module-level CONFIG (shop layout + display-only prices) --------
---
--- The `*_upgrade_costs` arrays are DISPLAY-ONLY copies of the
--- `upgrade_cost` values already authoritative in economy.lua's
--- CONFIG.tiers, defenses.lua's CONFIG.wall_tiers/turret_tiers, and
--- behemoth.lua's CONFIG.stat_tiers -- those tables are module-local, not
--- exported, so this mirrors the existing intentional-duplication
--- convention already used between the data stage and runtime stage (see
--- defenses.lua's wall_tier_by_entity_name / behemoth.lua's
--- builder_structure_names comments). KEEP IN SYNC with those modules'
--- upgrade_cost fields whenever retuning; the actual currency deduction
--- always comes from the authoritative module, never from this table.
-local CONFIG = {
-  generator_upgrade_costs = { 100, 250, 500 }, -- economy.lua CONFIG.tiers[2..4].upgrade_cost
-  wall_upgrade_costs = { 150, 350 }, -- defenses.lua CONFIG.wall_tiers[2..3].upgrade_cost
-  turret_upgrade_costs = { 200, 450 }, -- defenses.lua CONFIG.turret_tiers[2..3].upgrade_cost
-  stat_upgrade_costs = { 100, 250, 500 }, -- behemoth.lua CONFIG.stat_tiers.*[1..3].upgrade_cost (same ladder for all four stats)
+-- Builds a single-placeholder effect line (e.g. "Income per interval:
+-- 5 / 10 / 18 / 30") from an arbitrary-length per-tier value ladder, so one
+-- locale key per effect type covers every ladder length without needing
+-- -2/-3/-4 key variants the way the cost ladder above does.
+local function effect_line(effect_key, values)
+  local parts = {}
+  for i, value in ipairs(values) do
+    parts[i] = tostring(value)
+  end
+  return { effect_key, table.concat(parts, " / ") }
+end
 
+-- Assembles the full tooltip: item name, then the cost ladder, then
+-- (optionally) an effect ladder line. Passing a nil `effect_key` omits the
+-- effect line entirely (used for Turret; see get_turret_tier_info's doc
+-- comment in defenses.lua for why no damage-per-tier number is available).
+local function upgrade_tooltip(name_locale, costs, effect_key, effect_values)
+  if effect_key and effect_values and #effect_values > 0 then
+    return { "", name_locale, "\n", cost_line(costs), "\n", effect_line(effect_key, effect_values) }
+  end
+  return { "", name_locale, "\n", cost_line(costs) }
+end
+
+-- Per-item tooltip builders (FIX A/B: pull cost + effect data from the
+-- owning module's read-only accessor instead of duplicated literals) -------
+
+local function generator_tooltip()
+  local costs, incomes = {}, {}
+  for _, tier_info in ipairs(economy.get_generator_tier_info()) do
+    incomes[#incomes + 1] = tier_info.income_per_interval
+    if tier_info.upgrade_cost > 0 then
+      costs[#costs + 1] = tier_info.upgrade_cost
+    end
+  end
+  return upgrade_tooltip({ "bvb-economy.generator-name" }, costs, "bvb-shop.effect-income", incomes)
+end
+
+local function wall_tooltip()
+  local costs, healths = {}, {}
+  for _, tier_info in ipairs(defenses.get_wall_tier_info()) do
+    if tier_info.max_health then
+      healths[#healths + 1] = tier_info.max_health
+    end
+    if tier_info.upgrade_cost > 0 then
+      costs[#costs + 1] = tier_info.upgrade_cost
+    end
+  end
+  return upgrade_tooltip({ "bvb-defenses.wall-name" }, costs, "bvb-shop.effect-hp", healths)
+end
+
+-- No effect line: Turret damage-per-tier isn't available from an accessor
+-- (see defenses.get_turret_tier_info's doc comment); only the cost ladder
+-- is shown, same as before this change.
+local function turret_tooltip()
+  local costs = {}
+  for _, tier_info in ipairs(defenses.get_turret_tier_info()) do
+    if tier_info.upgrade_cost > 0 then
+      costs[#costs + 1] = tier_info.upgrade_cost
+    end
+  end
+  return upgrade_tooltip({ "bvb-defenses.turret-name" }, costs, nil, nil)
+end
+
+local function stat_tooltip(name_locale, stat_name, effect_key)
+  local costs, magnitudes = {}, {}
+  for _, tier_info in ipairs(behemoth.get_stat_tier_info(stat_name)) do
+    costs[#costs + 1] = tier_info.upgrade_cost
+    magnitudes[#magnitudes + 1] = tier_info.magnitude
+  end
+  return upgrade_tooltip(name_locale, costs, effect_key, magnitudes)
+end
+
+local function scanner_sweep_tooltip()
+  return { "", { "bvb-behemoth.scanner-sweep" }, "\n", { "bvb-shop.free-cooldown-gated" } }
+end
+
+-- Immutable module-level CONFIG (shop layout; tooltips built on demand) -----
+
+local CONFIG = {
   builder_items = {
     {
       element_name = "bvb-shop-buy-generator",
       sprite = "item/bvb-generator",
       kind = "generator",
-      tooltip = upgrade_tooltip({ "bvb-economy.generator-name" }, { 100, 250, 500 }),
+      tooltip_fn = generator_tooltip,
     },
     {
       element_name = "bvb-shop-buy-wall",
       sprite = "item/bvb-wall-1",
       kind = "wall",
-      tooltip = upgrade_tooltip({ "bvb-defenses.wall-name" }, { 150, 350 }),
+      tooltip_fn = wall_tooltip,
     },
     {
       element_name = "bvb-shop-buy-turret",
       sprite = "item/bvb-turret",
       kind = "turret",
-      tooltip = upgrade_tooltip({ "bvb-defenses.turret-name" }, { 200, 450 }),
+      tooltip_fn = turret_tooltip,
     },
   },
 
@@ -112,34 +209,42 @@ local CONFIG = {
       sprite = "virtual-signal/signal-red",
       kind = "stat",
       stat_name = "damage",
-      tooltip = upgrade_tooltip({ "bvb-behemoth.stat-damage" }, { 100, 250, 500 }),
+      tooltip_fn = function()
+        return stat_tooltip({ "bvb-behemoth.stat-damage" }, "damage", "bvb-shop.effect-damage")
+      end,
     },
     {
       element_name = "bvb-shop-buy-attack-speed",
       sprite = "virtual-signal/signal-yellow",
       kind = "stat",
       stat_name = "attack_speed",
-      tooltip = upgrade_tooltip({ "bvb-behemoth.stat-attack-speed" }, { 100, 250, 500 }),
+      tooltip_fn = function()
+        return stat_tooltip({ "bvb-behemoth.stat-attack-speed" }, "attack_speed", "bvb-shop.effect-generic")
+      end,
     },
     {
       element_name = "bvb-shop-buy-armor",
       sprite = "virtual-signal/signal-blue",
       kind = "stat",
       stat_name = "armor",
-      tooltip = upgrade_tooltip({ "bvb-behemoth.stat-armor" }, { 100, 250, 500 }),
+      tooltip_fn = function()
+        return stat_tooltip({ "bvb-behemoth.stat-armor" }, "armor", "bvb-shop.effect-generic")
+      end,
     },
     {
       element_name = "bvb-shop-buy-max-health",
       sprite = "virtual-signal/signal-green",
       kind = "stat",
       stat_name = "max_health",
-      tooltip = upgrade_tooltip({ "bvb-behemoth.stat-health" }, { 100, 250, 500 }),
+      tooltip_fn = function()
+        return stat_tooltip({ "bvb-behemoth.stat-health" }, "max_health", "bvb-shop.effect-generic")
+      end,
     },
     {
       element_name = "bvb-shop-buy-scanner-sweep",
       sprite = "virtual-signal/signal-info",
       kind = "scanner_sweep",
-      tooltip = { "", { "bvb-behemoth.scanner-sweep" }, "\n", { "bvb-shop.free-cooldown-gated" } },
+      tooltip_fn = scanner_sweep_tooltip,
     },
   },
 }
@@ -185,9 +290,46 @@ local function get_role(player_index)
   return nil
 end
 
+-- Read-only lookup against `storage.match` (see get_role above), additionally
+-- gated on the match actually being live (`phase == "in_progress"`) -- once
+-- a match ends, the winning side's role membership lingers in
+-- storage.match until the next restart_match (match.lua is read-only from
+-- here), so gating on phase is what makes the persistent balance label
+-- (FIX C) disappear promptly at match end rather than only at the next
+-- restart.
+local function in_match_role(player_index)
+  if storage.match.phase ~= "in_progress" then
+    return nil
+  end
+  return get_role(player_index)
+end
+
 local function notify_reason(player, reason)
   local key = REASON_MESSAGE_KEYS[reason] or "bvb-shop.reason-unknown"
   player.print({ key })
+end
+
+-- Persistent top-of-screen balance label (FIX C) -----------------------------
+-- Separate from the shop panel's own in-frame balance label (BALANCE_LABEL_NAME
+-- above): always visible in `player.gui.top` for any player currently
+-- holding a role (Builder or Behemoth) in an in-progress match, regardless
+-- of whether their shop panel is open. Spectators/lobby players never see
+-- it (in_match_role returns nil for them). Single entry point handles
+-- create/update/destroy based on current role state, so every caller below
+-- (on_balance_tick, purchases, join flow, teardown) can just call this and
+-- not duplicate the ensure/destroy branching.
+local function refresh_top_balance_label(player)
+  if not in_match_role(player.index) then
+    local label = player.gui.top[TOP_BALANCE_LABEL_NAME]
+    if label then
+      label.destroy()
+    end
+    return
+  end
+  if not player.gui.top[TOP_BALANCE_LABEL_NAME] then
+    player.gui.top.add({ type = "label", name = TOP_BALANCE_LABEL_NAME, caption = "" })
+  end
+  player.gui.top[TOP_BALANCE_LABEL_NAME].caption = { "bvb-shop.top-balance", tostring(economy.get_currency(player.index)) }
 end
 
 -- Called after every upgrade/ability attempt: refreshes the balance display
@@ -197,6 +339,7 @@ end
 local function finish_purchase(player, ok, reason)
   if ok then
     M.refresh_balance(player)
+    refresh_top_balance_label(player)
   else
     notify_reason(player, reason)
   end
@@ -264,10 +407,11 @@ function M.on_load()
 end
 
 -- Full-module reset, invoked from match.lua's restart_match: destroys any
--- open shop frame (across every known player, not just connected ones, so a
--- disconnected player's leftover GUI doesn't reappear stale next match) and
--- re-seeds storage.shop. Guards every step since a fresh/short-lived save
--- may have no players or GUIs yet.
+-- open shop frame AND the persistent top balance label (FIX C -- restart is
+-- one of the two teardown points that check calls for) across every known
+-- player, not just connected ones, so a disconnected player's leftover GUI
+-- doesn't reappear stale next match, and re-seeds storage.shop. Guards every
+-- step since a fresh/short-lived save may have no players or GUIs yet.
 
 function M.reset()
   for _, player in pairs(game.players) do
@@ -276,13 +420,19 @@ function M.reset()
       if frame then
         frame.destroy()
       end
+      local top_balance_label = player.gui.top[TOP_BALANCE_LABEL_NAME]
+      if top_balance_label then
+        top_balance_label.destroy()
+      end
     end
   end
   storage.shop = {}
 end
 
 -- Player join flow: makes sure every player has the top-of-screen toggle
--- button. Wired from control.lua alongside match.lua's own
+-- button, and (FIX C) shows/hides the persistent top balance label if a
+-- match is already running and this player already holds a role (e.g.
+-- reconnecting). Wired from control.lua alongside match.lua's own
 -- on_player_created/on_player_joined_game handling (same
 -- multi-module-per-event pattern already used for on_entity_died,
 -- on_built_entity, and on_gui_click; see control.lua).
@@ -291,6 +441,7 @@ function M.on_player_created(event)
   local player = game.get_player(event.player_index)
   if player then
     ensure_toggle_button(player)
+    refresh_top_balance_label(player)
   end
 end
 
@@ -298,6 +449,7 @@ function M.on_player_joined_game(event)
   local player = game.get_player(event.player_index)
   if player then
     ensure_toggle_button(player)
+    refresh_top_balance_label(player)
   end
 end
 
@@ -332,7 +484,7 @@ function M.open(player)
         type = "sprite-button",
         name = item.element_name,
         sprite = item.sprite,
-        tooltip = item.tooltip,
+        tooltip = item.tooltip_fn(),
       })
     end
   else
@@ -353,6 +505,23 @@ function M.close(player)
   end
   storage.shop[player.index] = storage.shop[player.index] or {}
   storage.shop[player.index].open = false
+end
+
+-- Closes a player's shop frame by player_index (audit fix: called from
+-- match.lua's elimination paths so an eliminated/disconnected player's shop
+-- doesn't linger open). Thin wrapper around M.close, which takes a
+-- LuaPlayer rather than an index. Also tears down the persistent top
+-- balance label (FIX C) immediately where role membership has already been
+-- cleared by the caller (e.g. an eliminated Builder); otherwise the next
+-- on_balance_tick call (<=60 ticks later) removes it once
+-- in_match_role/storage.match reflects the change.
+
+function M.close_for_player(player_index)
+  local player = game.get_player(player_index)
+  if player and player.valid then
+    M.close(player)
+    refresh_top_balance_label(player)
+  end
 end
 
 function M.toggle(player)
@@ -381,10 +550,17 @@ end
 -- Periodic refresh for passive income (7.2), wired from control.lua's
 -- existing on_nth_tick(60) cadence alongside economy.on_income_tick (which
 -- runs first in that handler, so balances are already up to date by the
--- time this reads them) -- no new tick cadence is registered.
+-- time this reads them) -- no new tick cadence is registered. Also drives
+-- the persistent top balance label (FIX C) for every connected in-match
+-- player regardless of whether their shop panel is open; this is the
+-- cadence that creates the label shortly after a player is granted a role
+-- and removes it shortly after they lose one (elimination, disconnect, or
+-- match end), since match.lua (read-only from here) has no dedicated
+-- role-granted/role-lost event to hook into directly.
 
 function M.on_balance_tick(_event)
   for _, player in pairs(game.connected_players) do
+    refresh_top_balance_label(player)
     local state = storage.shop[player.index]
     if state and state.open then
       M.refresh_balance(player)

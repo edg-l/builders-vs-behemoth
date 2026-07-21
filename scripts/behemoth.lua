@@ -173,12 +173,14 @@ end
 -- on_nth_tick(60) cadence alongside economy.on_income_tick and
 -- defenses.on_ammo_tick, so no new event registration is needed.
 
-function M.on_equip_tick(_event)
-  local behemoth_player_index = storage.match.behemoth_player_index
-  if not behemoth_player_index then
-    return
-  end
-  local player = game.get_player(behemoth_player_index)
+-- Arms/re-ammos the Behemoth's character. Public so match.lua can call it
+-- immediately on spawn (audit fix: without this, the Behemoth is unarmed
+-- for up to ~1s until the next on_equip_tick fires); on_equip_tick below
+-- just calls this every tick, so both callers share one idempotent
+-- implementation.
+
+function M.arm(player_index)
+  local player = game.get_player(player_index)
   local character = player and player.character
   if not (character and character.valid) then
     return
@@ -194,6 +196,14 @@ function M.on_equip_tick(_event)
   if ammo_inventory.get_item_count(CONFIG.ammo_item_name) < CONFIG.ammo_refill_threshold then
     ammo_inventory.insert({ name = CONFIG.ammo_item_name, count = CONFIG.ammo_refill_amount })
   end
+end
+
+function M.on_equip_tick(_event)
+  local behemoth_player_index = storage.match.behemoth_player_index
+  if not behemoth_player_index then
+    return
+  end
+  M.arm(behemoth_player_index)
 end
 
 -- Damage-to-currency income (5.2) --------------------------------------------
@@ -269,6 +279,33 @@ function M.upgrade_stat(player_index, stat_name)
   storage.behemoth.stat_tier[stat_name] = next_tier
   apply_stat_tier(stat_name, tier_stats)
   return true
+end
+
+-- Read-only tier accessor (design D3-adjacent: single source of truth for
+-- shop.lua's tooltips, fixing the previous duplicated-cost-array problem).
+-- Returns a NEW array (never the live CONFIG.stat_tiers table) of
+-- { tier, upgrade_cost, magnitude } for the given stat_name's tier ladder,
+-- in tier order, or `nil` for an unknown stat_name. `magnitude` is the
+-- per-tier effect value under a uniform key regardless of which underlying
+-- field CONFIG.stat_tiers uses for that stat (ammo_damage_modifier /
+-- gun_speed_modifier / mitigation_bonus / health_bonus -- see CONFIG.stat_tiers'
+-- comment above), so shop.lua doesn't need to know each stat's internal
+-- field name.
+
+function M.get_stat_tier_info(stat_name)
+  local tiers = CONFIG.stat_tiers[stat_name]
+  if not tiers then
+    return nil
+  end
+  local info = {}
+  for tier, tier_stats in ipairs(tiers) do
+    local magnitude = tier_stats.ammo_damage_modifier
+      or tier_stats.gun_speed_modifier
+      or tier_stats.mitigation_bonus
+      or tier_stats.health_bonus
+    info[tier] = { tier = tier, upgrade_cost = tier_stats.upgrade_cost, magnitude = magnitude }
+  end
+  return info
 end
 
 -- Scanner Sweep (5.4) ---------------------------------------------------------

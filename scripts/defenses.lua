@@ -38,10 +38,13 @@ local CONFIG = {
   wall_overlay_sprite = "virtual-signal/signal-white",
 
   turret_entity_name = "bvb-turret",
+  -- Damage lives solely in prototypes/turrets.lua's TURRET_TIER_DAMAGE (baked
+  -- into each tier's ammo item); this table has no damage field to avoid two
+  -- sources of truth for the same number.
   turret_tiers = {
-    [1] = { ammo_item_name = "bvb-turret-ammo-1", upgrade_cost = 0, damage = 20 },
-    [2] = { ammo_item_name = "bvb-turret-ammo-2", upgrade_cost = 200, damage = 45 },
-    [3] = { ammo_item_name = "bvb-turret-ammo-3", upgrade_cost = 450, damage = 90 },
+    [1] = { ammo_item_name = "bvb-turret-ammo-1", upgrade_cost = 0 },
+    [2] = { ammo_item_name = "bvb-turret-ammo-2", upgrade_cost = 200 },
+    [3] = { ammo_item_name = "bvb-turret-ammo-3", upgrade_cost = 450 },
   },
   -- A Turret's ammo inventory is topped up (never fed by belts/inserters,
   -- design keeps it script-only) whenever its current ammo count drops
@@ -192,13 +195,11 @@ function M.upgrade_wall(player_index, unit_number)
   local force = old_entity.force
   local direction = old_entity.direction
 
-  if record.overlay then
-    record.overlay.destroy()
-  end
-  -- Destroy+create happen synchronously within this single call, with no
-  -- game tick simulated in between, so the choke is never actually open to
-  -- the Behemoth (spec: "no gap is opened").
-  old_entity.destroy()
+  -- Create the new-tier entity FIRST, before touching the old one. If
+  -- create_entity fails (e.g. something else occupies the tile in the
+  -- instant between the checks above and here), the old Wall + its storage
+  -- record are left completely untouched -- no gap in the choke, no zombie
+  -- storage.walls entry, and no currency deducted.
   local new_entity = surface.create_entity({
     name = tier_stats.entity_name,
     position = position,
@@ -209,6 +210,14 @@ function M.upgrade_wall(player_index, unit_number)
     return false, "create-failed"
   end
   new_entity.health = new_entity.max_health * health_ratio
+
+  -- Only now destroy the old entity + its overlay; the new entity already
+  -- exists at the same position, so the choke is never actually open to the
+  -- Behemoth (spec: "no gap is opened").
+  if record.overlay then
+    record.overlay.destroy()
+  end
+  old_entity.destroy()
 
   economy.add_currency(player_index, -tier_stats.upgrade_cost)
   storage.walls[unit_number] = nil
@@ -283,6 +292,47 @@ function M.on_ammo_tick(_event)
   for _, record in pairs(storage.turrets) do
     refill_turret_ammo(record)
   end
+end
+
+-- Read-only tier accessors (design D3-adjacent: single source of truth for
+-- shop.lua's tooltips, fixing the previous duplicated-cost-array problem).
+-- Both return a NEW array (never a live CONFIG table) in tier order.
+--
+-- Wall max_health is read live from the actual entity prototype
+-- (`game.entity_prototypes[entity_name].max_health`) rather than a
+-- defenses.lua CONFIG mirror of prototypes/walls.lua's WALL_TIER_HEALTH --
+-- no such mirror exists today, and adding one would be a THIRD source of
+-- truth for the same number. Reading the live prototype instead is the
+-- authoritative value by construction and can never drift out of sync.
+--
+-- Turret damage has no equivalent accessor: it's baked into each tier's
+-- ammo item prototype's target_effects (prototypes/turrets.lua's
+-- TURRET_TIER_DAMAGE), which isn't exposed as a simple runtime scalar the
+-- way max_health is, and defenses.lua's CONFIG.turret_tiers deliberately
+-- has no damage field (see its comment above) to avoid a second source of
+-- truth. get_turret_tier_info() therefore only reports upgrade_cost;
+-- shop.lua's turret tooltip has no per-tier damage effect line as a result
+-- (reported in the shop-improvements task).
+
+function M.get_wall_tier_info()
+  local info = {}
+  for tier, tier_stats in ipairs(CONFIG.wall_tiers) do
+    local prototype = game and game.entity_prototypes[tier_stats.entity_name]
+    info[tier] = {
+      tier = tier,
+      upgrade_cost = tier_stats.upgrade_cost,
+      max_health = prototype and prototype.max_health or nil,
+    }
+  end
+  return info
+end
+
+function M.get_turret_tier_info()
+  local info = {}
+  for tier, tier_stats in ipairs(CONFIG.turret_tiers) do
+    info[tier] = { tier = tier, upgrade_cost = tier_stats.upgrade_cost }
+  end
+  return info
 end
 
 -- Full-module reset, invoked from match.lua's restart_match: destroys every

@@ -19,6 +19,14 @@ generator_entity.name = "bvb-generator"
 generator_entity.minable = { mining_time = 0.5, result = "bvb-generator" }
 generator_entity.max_health = 200 -- placeholder; TBD balance pass
 generator_entity.inventory_size = 1 -- clone inherits steel-chest's 48 slots; not meant to be usable storage
+-- Audit fix: block blueprint capture/robot (re)construction so the
+-- storage.generators tracking in scripts/economy.lua (one-per-builder
+-- enforcement) can't be bypassed; appended, not overwritten, so the base
+-- game's "placeable-neutral"/"player-creation" flags the clone carries are
+-- preserved. Hand-mining is unaffected -- it's governed by `minable` above,
+-- not by these flags.
+table.insert(generator_entity.flags, "not-blueprintable")
+table.insert(generator_entity.flags, "not-deconstructable")
 
 local generator_item = table.deepcopy(data.raw["item"]["steel-chest"])
 generator_item.name = "bvb-generator"

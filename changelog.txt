@@ -1,0 +1,45 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.5
+Date: 2026-07-21
+  Features:
+    - Persistent currency balance shown in the top bar for players in a match.
+    - Shop tooltips now show each upgrade's effect (Generator income, Wall HP, Behemoth stats) alongside its cost.
+  Changes:
+    - Builders now spawn scattered around a ring instead of stacked on one tile.
+    - Anti-cheese: each side is restricted to its intended recipes. Builders can craft only the mod's structures; the Behemoth crafts nothing.
+    - Native enemies (biters) are neutralized on match start so a third party cannot corrupt the match.
+  Bugfixes:
+    - Wall upgrade no longer destroys the old wall before the replacement is confirmed, which could leave a choke permanently open.
+    - Guarded character spawning so a failed spawn can no longer crash the mod.
+    - A match now requires at least two players to start, fixing a one-player soft-lock.
+    - Late joins and disconnects during the countdown or a running match are handled instead of leaving ghosts or unreachable win conditions.
+    - Eliminated players can no longer respawn back into the match.
+    - Mod structures can no longer be blueprinted or robot-(re)built, which had bypassed tracking.
+    - Upgraded Walls now mine back into a tier-1 item, closing a free re-placement exploit.
+    - Added on-spawn role briefings, including a reminder that the Behemoth must hold its shoot key to attack.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.4
+Date: 2026-07-21
+  Features:
+    - Builders now spawn with a starter kit (a Generator plus stone brick and iron gear wheels) so the build-and-defend loop is reachable.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.3
+Date: 2026-07-21
+  Bugfixes:
+    - Cross-checked prototypes against the Factorio 2.0 base source: Turrets now mine into the correct item, the Behemoth gun stays hidden, the Generator is no longer a usable chest, and ammo categories are hidden.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.2
+Date: 2026-07-21
+  Bugfixes:
+    - Fixed the ammo prototypes for Factorio 2.0 (item-level ammo_category); the data stage now loads.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.1
+Date: 2026-07-21
+  Bugfixes:
+    - Fixed a Factorio 2.0 item flag that prevented the mod from loading.
+    - Match restart now resets economy, defense, and Behemoth state instead of leaking it into the next match.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-07-21
+  Features:
+    - Initial MVP: asymmetric one-Behemoth-versus-many-Builders core loop, with match lifecycle, Builder economy, defenses, Behemoth combat, fog-of-war hiding, and a shop.

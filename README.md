@@ -22,7 +22,7 @@ Drop the mod into your Factorio `mods/` folder:
 - Windows: `%APPDATA%\Factorio\mods\`
 - macOS: `~/Library/Application Support/factorio/mods/`
 
-Either copy or symlink the repo as `builders-vs-behemoth_0.1.0`, or zip it (with `info.json` at the zip root) as `builders-vs-behemoth_0.1.0.zip`, then enable it from the in-game mod list. A normal freeplay world is enough; the mod runs role selection and spawning on its own.
+Either copy or symlink the repo as `builders-vs-behemoth_<version>`, or zip it (with `info.json` at the zip root) as `builders-vs-behemoth_<version>.zip`, matching the `version` in `info.json`, then enable it from the in-game mod list. A normal freeplay world is enough; the mod runs role selection and spawning on its own.
 
 ## Playtest on a headless server
 

@@ -14,7 +14,11 @@
 -- as scripted upgrade targets (scripts/defenses.lua's upgrade_wall), so
 -- their items are hidden/uncraftable -- entity.minable still needs a valid
 -- item result, but nothing lets a player obtain one outside the upgrade
--- path.
+-- path. Tier>1 walls mine back into the TIER 1 item, not their own tier
+-- (audit fix: re-placing a mined tier>1 Wall would otherwise recreate a
+-- free tier>1 Wall, letting a Builder mine-and-replace to dodge the
+-- upgrade_cost; re-placement is now always tier 1, so upgrades must be
+-- re-paid). Tier 1 keeps mining into itself.
 --
 -- Placeholder values (max_health, upgrade_cost): TBD balance pass, see
 -- design.md "Open Questions". Keep scripts/defenses.lua's
@@ -30,7 +34,14 @@ for tier, max_health in ipairs(WALL_TIER_HEALTH) do
   local wall_entity = table.deepcopy(data.raw["wall"]["stone-wall"])
   wall_entity.name = entity_name
   wall_entity.max_health = max_health
-  wall_entity.minable = { mining_time = 0.5, result = entity_name }
+  wall_entity.minable = { mining_time = 0.5, result = tier == 1 and entity_name or "bvb-wall-1" }
+  -- Audit fix: block blueprint capture/robot (re)construction so the
+  -- storage.walls tracking in scripts/defenses.lua can't be bypassed;
+  -- appended, not overwritten, so the base game's "placeable-neutral"/
+  -- "player-creation" flags the clone carries are preserved. Hand-mining is
+  -- unaffected -- it's governed by `minable` above, not by these flags.
+  table.insert(wall_entity.flags, "not-blueprintable")
+  table.insert(wall_entity.flags, "not-deconstructable")
   data:extend({ wall_entity })
 
   local wall_item = table.deepcopy(data.raw["item"]["stone-wall"])
