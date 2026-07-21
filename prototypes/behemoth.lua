@@ -35,7 +35,8 @@ data:extend({
 
 local behemoth_gun = table.deepcopy(data.raw["gun"]["pistol"])
 behemoth_gun.name = "bvb-behemoth-gun"
-behemoth_gun.flags = { "hidden" } -- script-managed only; never craftable or hand-loadable
+behemoth_gun.hidden = true -- script-managed only; never craftable or hand-loadable
+behemoth_gun.hidden_in_factoriopedia = true
 behemoth_gun.attack_parameters.ammo_category = "bvb-behemoth-weapon"
 data:extend({ behemoth_gun })
 
@@ -48,7 +49,8 @@ data:extend({
     subgroup = "ammo",
     order = "bvb-behemoth-ammo",
     stack_size = 200,
-    flags = { "hidden" }, -- script-managed only; never craftable or hand-loadable
+    hidden = true, -- script-managed only; never craftable or hand-loadable
+    hidden_in_factoriopedia = true,
     ammo_type = {
       category = "bvb-behemoth-weapon",
       target_type = "entity",

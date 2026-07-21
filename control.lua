@@ -93,6 +93,11 @@ end)
 
 script.on_event(defines.events.on_player_mined_entity, function(event)
   economy.on_player_mined_entity(event)
+  defenses.on_player_mined_entity(event)
+end)
+
+script.on_event(defines.events.on_player_left_game, function(event)
+  match.on_player_left_game(event)
 end)
 
 -- Behemoth combat (capability: behemoth-combat) ------------------------------

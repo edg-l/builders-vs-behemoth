@@ -149,6 +149,23 @@ function M.on_load()
   -- No `game` access here.
 end
 
+-- Full-module reset, invoked from match.lua's restart_match: clears the
+-- `behemoth` force's persistent stat modifiers (design D3/D9: this module
+-- owns them, so it's responsible for zeroing them rather than match.lua
+-- reaching into behemoth-owned state) and re-seeds storage.behemoth to the
+-- same initial shape M.on_init produces. Only called from runtime (restart
+-- button click), never from on_load, so touching `game` here is safe.
+
+function M.reset()
+  local force = game.forces.behemoth
+  if force then
+    force.character_health_bonus = 0
+    force.set_ammo_damage_modifier(CONFIG.weapon_ammo_category, 0)
+    force.set_gun_speed_modifier(CONFIG.weapon_ammo_category, 0)
+  end
+  M.on_init()
+end
+
 -- Behemoth entity (5.1) -------------------------------------------------------
 -- Base entity choice (vanilla character, see CONFIG comment above) and the
 -- weapon prototype it wields live in prototypes/behemoth.lua. This tick
@@ -196,8 +213,17 @@ function M.on_entity_damaged(event)
 
   if entity.force.name == "builders" and CONFIG.builder_structure_names[entity.name] then
     local behemoth_player_index = storage.match.behemoth_player_index
-    if behemoth_player_index then
-      economy.add_currency(behemoth_player_index, math.floor(event.final_damage_amount * CONFIG.income_rate))
+    local cause = event.cause
+    -- Only award income when the Behemoth's own character dealt the damage
+    -- (never nil/scripted/environmental causes, and never damage dealt by a
+    -- Turret or anything else); resolved by identity against the current
+    -- Behemoth player's character rather than by force/name alone.
+    if behemoth_player_index and cause and cause.valid then
+      local behemoth_player = game.get_player(behemoth_player_index)
+      local behemoth_character = behemoth_player and behemoth_player.character
+      if behemoth_character and behemoth_character.valid and cause == behemoth_character then
+        economy.add_currency(behemoth_player_index, math.floor(event.final_damage_amount * CONFIG.income_rate))
+      end
     end
     return
   end

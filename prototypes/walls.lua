@@ -38,7 +38,8 @@ for tier, max_health in ipairs(WALL_TIER_HEALTH) do
   wall_item.place_result = entity_name
   wall_item.order = entity_name
   if tier > 1 then
-    wall_item.flags = { "hidden" } -- not directly craftable; reached only via the scripted upgrade path
+    wall_item.hidden = true -- not directly craftable; reached only via the scripted upgrade path
+    wall_item.hidden_in_factoriopedia = true
   end
   data:extend({ wall_item })
 

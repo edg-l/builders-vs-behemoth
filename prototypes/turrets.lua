@@ -69,7 +69,8 @@ for tier, damage in ipairs(TURRET_TIER_DAMAGE) do
       subgroup = "ammo",
       order = "bvb-turret-ammo-" .. tier,
       stack_size = 200,
-      flags = { "hidden" }, -- script-managed only; never craftable or hand-loadable
+      hidden = true, -- script-managed only; never craftable or hand-loadable
+      hidden_in_factoriopedia = true,
       ammo_type = {
         category = "bvb-turret-ammo",
         target_type = "entity",

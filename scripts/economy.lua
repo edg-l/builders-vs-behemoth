@@ -135,6 +135,32 @@ function M.upgrade_generator(player_index)
   return true
 end
 
+-- Per-player cleanup, invoked from match.lua when a builder is eliminated
+-- (on_entity_died) or disconnects (on_player_left_game) so their Generator
+-- stops producing income for a player no longer in the match ------------
+
+function M.clear_player(player_index)
+  local record = storage.generators[player_index]
+  if record and record.entity and record.entity.valid then
+    record.entity.destroy()
+  end
+  storage.generators[player_index] = nil
+end
+
+-- Full-module reset, invoked from match.lua's restart_match (design D3: this
+-- module owns storage.currency/storage.generators, so it's responsible for
+-- clearing them rather than match.lua reaching into this namespace) --------
+
+function M.reset()
+  for _, record in pairs(storage.generators) do
+    if record.entity and record.entity.valid then
+      record.entity.destroy()
+    end
+  end
+  storage.generators = {}
+  storage.currency = {}
+end
+
 -- Currency income tick (3.5) -------------------------------------------------
 
 function M.on_income_tick(_event)

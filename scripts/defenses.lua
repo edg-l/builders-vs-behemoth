@@ -133,6 +133,31 @@ function M.on_entity_died(event)
   end
 end
 
+-- Salvage cleanup, mirrors on_entity_died above but for a Wall/Turret being
+-- MINED (base game already returns the item; this only keeps
+-- storage.walls/storage.turrets consistent so the overlay render object
+-- doesn't leak and the tile is free for a new placement) -------------------
+
+function M.on_player_mined_entity(event)
+  local entity = event.entity
+  if not (entity and entity.unit_number) then
+    return
+  end
+
+  local wall_record = storage.walls[entity.unit_number]
+  if wall_record then
+    if wall_record.overlay then
+      wall_record.overlay.destroy()
+    end
+    storage.walls[entity.unit_number] = nil
+    return
+  end
+
+  if storage.turrets[entity.unit_number] then
+    storage.turrets[entity.unit_number] = nil
+  end
+end
+
 -- Wall upgrade-in-place (4.3), invoked from shop.lua purchase dispatch -------
 -- Signature: defenses.upgrade_wall(player_index, unit_number). Walls aren't
 -- owned by a single builder (unlike the Generator), so the upgrade is paid
@@ -258,6 +283,29 @@ function M.on_ammo_tick(_event)
   for _, record in pairs(storage.turrets) do
     refill_turret_ammo(record)
   end
+end
+
+-- Full-module reset, invoked from match.lua's restart_match: destroys every
+-- Wall (and its overlay) and Turret still standing so a new match starts
+-- with a clean board rather than inheriting the previous match's defenses.
+
+function M.reset()
+  for _, record in pairs(storage.walls) do
+    if record.overlay and record.overlay.valid then
+      record.overlay.destroy()
+    end
+    if record.entity and record.entity.valid then
+      record.entity.destroy()
+    end
+  end
+  storage.walls = {}
+
+  for _, record in pairs(storage.turrets) do
+    if record.entity and record.entity.valid then
+      record.entity.destroy()
+    end
+  end
+  storage.turrets = {}
 end
 
 return M

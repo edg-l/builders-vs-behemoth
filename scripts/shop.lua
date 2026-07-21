@@ -263,6 +263,24 @@ function M.on_load()
   -- No `game` access here.
 end
 
+-- Full-module reset, invoked from match.lua's restart_match: destroys any
+-- open shop frame (across every known player, not just connected ones, so a
+-- disconnected player's leftover GUI doesn't reappear stale next match) and
+-- re-seeds storage.shop. Guards every step since a fresh/short-lived save
+-- may have no players or GUIs yet.
+
+function M.reset()
+  for _, player in pairs(game.players) do
+    if player and player.valid then
+      local frame = player.gui.screen[FRAME_NAME]
+      if frame then
+        frame.destroy()
+      end
+    end
+  end
+  storage.shop = {}
+end
+
 -- Player join flow: makes sure every player has the top-of-screen toggle
 -- button. Wired from control.lua alongside match.lua's own
 -- on_player_created/on_player_joined_game handling (same

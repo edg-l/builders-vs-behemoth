@@ -8,6 +8,11 @@
 --
 -- Fills task group 2 (spec: match-lifecycle).
 
+local economy = require("scripts.economy")
+local defenses = require("scripts.defenses")
+local behemoth = require("scripts.behemoth")
+local shop = require("scripts.shop")
+
 local M = {}
 
 -- Tunables (placeholders; retune during the first balance pass, see
@@ -208,6 +213,14 @@ local function restart_match()
   for _, player in pairs(game.connected_players) do
     destroy_gui(player, END_FRAME_NAME)
   end
+  -- Cross-module reset (each module owns and clears its own namespace, see
+  -- design D3/D9) so leftover currency/generators/walls/turrets/render
+  -- objects/force modifiers from the previous match never bleed into this
+  -- one.
+  economy.reset()
+  defenses.reset()
+  behemoth.reset()
+  shop.reset()
   storage.match.phase = "lobby"
   storage.match.role_votes = {}
   storage.match.behemoth_player_index = nil
@@ -269,12 +282,12 @@ end
 
 function M.setup_forces()
   local builders = game.forces.builders or game.create_force("builders")
-  local behemoth = game.forces.behemoth or game.create_force("behemoth")
+  local behemoth_force = game.forces.behemoth or game.create_force("behemoth")
   -- Relations are unidirectional: set cease-fire off in BOTH directions so
   -- the forces are mutually hostile (design D2). All Builder players share
   -- the single `builders` force, so they're auto-allied with each other.
-  builders.set_cease_fire(behemoth, false)
-  behemoth.set_cease_fire(builders, false)
+  builders.set_cease_fire(behemoth_force, false)
+  behemoth_force.set_cease_fire(builders, false)
 end
 
 function M.resolve_behemoth()
@@ -383,9 +396,36 @@ function M.on_entity_died(event)
     M.end_match("builders")
   elseif storage.match.builder_player_indices[player_index] then
     storage.match.builder_player_indices[player_index] = nil
+    -- An eliminated builder must stop earning income too, or their
+    -- Generator keeps producing currency for a player no longer in the
+    -- match.
+    economy.clear_player(player_index)
     -- Eliminated builders become spectators for the rest of the match; no
     -- auto-respawn (respawn roles are a later, non-MVP change).
     entity.player.set_controller({ type = defines.controllers.spectator })
+    if next(storage.match.builder_player_indices) == nil then
+      M.end_match("behemoth")
+    end
+  end
+end
+
+-- Disconnect handling (2.5, 2.6): without this, a disconnected Behemoth
+-- leaves Builders unable to ever trigger a win (nothing kills their
+-- character), and a disconnected last Builder leaves the Behemoth unable to
+-- ever trigger a win either -- both make the win condition unreachable.
+-- Wired from control.lua's on_player_left_game dispatch.
+
+function M.on_player_left_game(event)
+  if storage.match.phase ~= "in_progress" then
+    return
+  end
+
+  local player_index = event.player_index
+  if player_index == storage.match.behemoth_player_index then
+    M.end_match("builders")
+  elseif storage.match.builder_player_indices[player_index] then
+    storage.match.builder_player_indices[player_index] = nil
+    economy.clear_player(player_index)
     if next(storage.match.builder_player_indices) == nil then
       M.end_match("behemoth")
     end
