@@ -63,12 +63,19 @@ end)
 
 -- Match lifecycle (capability: match-lifecycle) ------------------------------
 
+-- Both match.lua (role-selection GUI) and shop.lua (top-of-screen shop
+-- toggle button; capability: shop-ui) need to react to a player showing up,
+-- so this fans out to both, matching the existing multi-module-per-event
+-- pattern used elsewhere in this file (see on_entity_died, on_built_entity,
+-- on_gui_click below).
 script.on_event(defines.events.on_player_created, function(event)
   match.on_player_created(event)
+  shop.on_player_created(event)
 end)
 
 script.on_event(defines.events.on_player_joined_game, function(event)
   match.on_player_joined_game(event)
+  shop.on_player_joined_game(event)
 end)
 
 script.on_event(defines.events.on_entity_died, function(event)
@@ -115,6 +122,7 @@ script.on_nth_tick(60, function(event)
   economy.on_income_tick(event)
   defenses.on_ammo_tick(event) -- tops up placed Turrets' ammo (builder-defenses 4.5/4.6)
   behemoth.on_equip_tick(event) -- arms/re-ammos the Behemoth's character (behemoth-combat 5.1/5.3)
+  shop.on_balance_tick(event) -- refreshes any open shop's balance label after income (shop-ui 7.2); must run after economy.on_income_tick above
 end)
 
 script.on_nth_tick(30, function(event)

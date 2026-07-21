@@ -47,10 +47,10 @@
 
 ## 7. Shop UI (spec: shop-ui)
 
-- [ ] 7.1 Build the shop panel in `player.gui.screen`: a `frame` of `sprite-button` tiles filtered by the player's role, with prices
-- [ ] 7.2 Add a live balance label bound to `storage.currency`, refreshed on change
-- [ ] 7.3 Implement `on_gui_click` purchase dispatch: affordability check, deduct, apply effect, refresh; reject + notify when unaffordable
-- [ ] 7.4 Wire shop purchases to economy (generator upgrades), defenses (wall/turret upgrades), and behemoth (stat upgrades, Scanner Sweep)
+- [x] 7.1 Build the shop panel in `player.gui.screen`: a `frame` of `sprite-button` tiles filtered by the player's role, with prices
+- [x] 7.2 Add a live balance label bound to `storage.currency`, refreshed on change
+- [x] 7.3 Implement `on_gui_click` purchase dispatch: affordability check, deduct, apply effect, refresh; reject + notify when unaffordable
+- [x] 7.4 Wire shop purchases to economy (generator upgrades), defenses (wall/turret upgrades), and behemoth (stat upgrades, Scanner Sweep)
 
 ## 8. Integration and validation
 
