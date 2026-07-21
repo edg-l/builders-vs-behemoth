@@ -204,8 +204,25 @@ local function spawn_character(player, position)
     player.print({ "bvb-match.spawn-failed" })
     return false
   end
+  -- The character is on the arena surface, but the player may still be on the
+  -- scenario's default (nauvis) surface. set_controller requires the character
+  -- to be on the player's current surface, so move the player onto the arena
+  -- surface first, otherwise it errors with a cross-surface mismatch.
+  if player.surface ~= surface then
+    player.teleport(spawn_position, surface)
+  end
   player.set_controller({ type = defines.controllers.character, character = character })
   return true
+end
+
+-- Moves a player onto the arena surface (near the hub center) so the lobby and
+-- everything else happen on the arena, not the scenario's default nauvis
+-- surface. Teleports the player (and their current character, if any).
+local function move_to_arena_lobby(player)
+  local surface = game.surfaces[CONFIG.surface_name]
+  if surface and player.surface ~= surface then
+    player.teleport({ x = 0, y = 0 }, surface)
+  end
 end
 
 -- Gives a freshly-spawned Builder the starter kit so they can immediately
@@ -509,6 +526,7 @@ function M.on_player_created(event)
     return
   end
   if storage.match.phase == "lobby" then
+    move_to_arena_lobby(player)
     show_role_gui(player)
   end
 end
@@ -519,6 +537,7 @@ function M.on_player_joined_game(event)
     return
   end
   if storage.match.phase == "lobby" then
+    move_to_arena_lobby(player)
     if not storage.match.role_votes[event.player_index] then
       show_role_gui(player)
     end
