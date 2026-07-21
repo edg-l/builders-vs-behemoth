@@ -17,11 +17,11 @@
 
 ## 3. Builder economy (spec: builder-economy)
 
-- [ ] 3.1 Define the Generator entity prototype and its tier stat table (output per tier, upgrade costs)
-- [ ] 3.2 Enforce one active Generator per builder on placement (`on_built_entity`); reject + notify on a second
-- [ ] 3.3 Implement salvage/refund so a builder can remove and re-place their Generator
-- [ ] 3.4 Implement Generator tier upgrade with affordability check and output-rate change
-- [ ] 3.5 Implement the currency income tick (`on_nth_tick`) crediting each builder by their Generator's per-tick output into `storage.currency`
+- [x] 3.1 Define the Generator entity prototype and its tier stat table (output per tier, upgrade costs)
+- [x] 3.2 Enforce one active Generator per builder on placement (`on_built_entity`); reject + notify on a second
+- [x] 3.3 Implement salvage/refund so a builder can remove and re-place their Generator
+- [x] 3.4 Implement Generator tier upgrade with affordability check and output-rate change
+- [x] 3.5 Implement the currency income tick (`on_nth_tick`) crediting each builder by their Generator's per-tick output into `storage.currency`
 
 ## 4. Builder defenses (spec: builder-defenses)
 

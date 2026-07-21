@@ -1,12 +1,10 @@
 -- data.lua -- data-stage entry point for Builders vs Behemoth.
 --
--- This is the single place prototype files get required from. No gameplay
--- prototypes are defined yet: the Generator, Wall, Turret tier tables, and
--- the Behemoth entity land in later task groups (3.1, 4.1, 5.1) under
--- prototypes/. Keeping this file present now so the mod loads cleanly and
--- later phases only need to add `require("prototypes.xxx")` lines here.
+-- This is the single place prototype files get required from. The Generator
+-- entity (task 3.1) is defined under prototypes/; the Wall, Turret tier
+-- tables, and the Behemoth entity land in later task groups (4.1, 5.1).
 
--- require("prototypes.generator")
+require("prototypes.generator")
 -- require("prototypes.walls")
 -- require("prototypes.turrets")
 -- require("prototypes.behemoth")

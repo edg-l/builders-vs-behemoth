@@ -73,6 +73,7 @@ end)
 
 script.on_event(defines.events.on_entity_died, function(event)
   match.on_entity_died(event)
+  economy.on_entity_died(event)
   defenses.on_entity_died(event)
 end)
 
