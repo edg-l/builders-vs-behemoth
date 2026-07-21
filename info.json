@@ -1,0 +1,11 @@
+{
+  "name": "builders-vs-behemoth",
+  "version": "0.1.0",
+  "title": "Builders vs Behemoth",
+  "author": "Edgar Luque",
+  "factorio_version": "2.0",
+  "description": "Asymmetric 1-hunter-vs-many-builders scenario mod: builders hide, build an economy, and defend chokes while the Behemoth farms damage-currency and hunts them down.",
+  "dependencies": [
+    "base >= 2.0.0"
+  ]
+}

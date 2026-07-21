@@ -1,0 +1,12 @@
+# Factorio mod build artifacts
+*.zip
+
+# Editor / OS
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Lua
+*.luac

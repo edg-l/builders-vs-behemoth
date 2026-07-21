@@ -1,0 +1,83 @@
+schema: spec-driven
+
+context: |
+  # Builders vs Behemoth — a Factorio multiplayer mod
+
+  ## What it is
+  An asymmetric "cat and mouse" scenario mod for Factorio 2.0, inspired by the
+  StarCraft II Arcade mode "Probes vs Zealot 2" (itself descended from the
+  Warcraft III map "Trolls and Elves"). One player is the lone hunter (the
+  "Behemoth"); everyone else are mutually-allied "Builders" who hide, build, and
+  upgrade defended bases, then eventually turn and kill the hunter.
+
+  ## Core loop (source mode, reskinned for Factorio)
+  - 1 Behemoth (player-controlled) vs N Builders (players, all allied).
+  - Behemoth spawns ~30-40s after builders (they scatter first) and has almost
+    nothing; its ONLY income is damage dealt to builder structures (1 dmg -> 1
+    currency). Builders' economy is its farm. It spends at a central shop on
+    damage / attack speed / armor / HP tiers and snowballs.
+  - Builders build + upgrade an economy engine (generator tiers), Walls + Turrets
+    on chokes to survive, and HIDE bases out of the hunter's vision. Endgame they
+    build combat units + a final turret to kill the Behemoth.
+  - Win: Behemoth wins if all builders die; Builders win if the Behemoth dies.
+  - Builders killed BY the hunter respawn as weaker hunter-allies ("Hunters",
+    cap 2) or as support casters ("Spirits"), gated to a ~6 minute mark.
+
+  ## Tech stack
+  - Factorio 2.0 Lua mod / scenario. info.json + Lua (data stage + control.lua).
+  - Multiplayer, lockstep-deterministic: ALL mutable state in `storage`; time from
+    `game.tick` (never os.time); `math.random`/`LuaRandomGenerator` only; keep
+    event handlers permanently registered and branch inside.
+  - Dev machine has NO Factorio installed: author + static-check here (luacheck,
+    JSON validation); runtime playtesting needs the game or the headless server.
+
+  ## Verified Factorio API mapping (from research, cite when relevant)
+  - Teams: LuaForce; `game.create_force` per side; `set_cease_fire(other,false)`
+    BOTH directions for mutual hostility (relations are unidirectional).
+  - Runtime spawning: `LuaSurface.create_entity`.
+  - Currency: plain counters in `storage` keyed by player/force. Behemoth income
+    via `on_entity_damaged` (event.final_damage_amount on builder structures).
+    Builder economy via `on_nth_tick` income drip scaled by upgrade tier.
+  - Shop GUI: `player.gui.screen` frame of `sprite-button`s; `on_gui_click`.
+  - HIDING works natively via fog of war: enemy structures built in a
+    charted-but-unwatched chunk are INVISIBLE to a force until re-observed (unit
+    vision range OR radar re-scan). No elevation/line-of-sight exists in Factorio
+    (cliffs block movement, not sight) — replace SC2's "walk up the hill" with
+    "scout / scan to reveal". Scanner Sweep = `LuaForce.chart(surface, area)`.
+  - Walls: model one wall = one placed entity per choke (single HP pool by
+    construction), tier-up via next_upgrade / apply_upgrade or destroy+recreate
+    carrying health — avoids fragile connected-tile HP pooling. Recolor per tier:
+    `wall` prototypes do NOT support runtime `entity.color`; use a LuaRendering
+    overlay (`rendering.draw_sprite{target={entity=w}, tint=..}` -> LuaRenderObject,
+    :destroy() on tier-up) OR build walls as `simple-entity-with-owner` (that type
+    DOES support entity.color).
+  - Combat AI (for endgame builder units / optional): LuaCommandable via
+    `entity.commandable:set_command`, defines.command.attack_area; native
+    pathfinder; re-issue on on_ai_command_completed.
+
+  ## Source-reliability note
+  The Probes vs Zealot 2 fandom wiki is fan-made and stale. Treat the PREMISE and
+  loop as solid (corroborated by CurseForge + gameplay videos) but every specific
+  NUMBER (generator tiers, wall HP, item costs, the 6-min gate) as approximate and
+  to be RE-TUNED for Factorio, not copied. No open-source original exists (closed
+  .SC2Map on CurseForge).
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
