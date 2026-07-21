@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.8
+Date: 2026-07-21
+  Bugfixes:
+    - Completed the shop-open fix: the wall-HP tooltip now calls the 2.0 method `LuaEntityPrototype.get_max_health()` instead of the removed 1.1 `.max_health` property. Verified the rest of the runtime API against the base 2.0 scripts; no other removed/renamed calls remain.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.7
 Date: 2026-07-21
   Bugfixes:

@@ -298,9 +298,10 @@ end
 -- shop.lua's tooltips, fixing the previous duplicated-cost-array problem).
 -- Both return a NEW array (never a live CONFIG table) in tier order.
 --
--- Wall max_health is read live from the actual entity prototype
--- (`prototypes.entity[entity_name].max_health`; 2.0 global, NOT the removed
--- 1.1 `game.entity_prototypes`) rather than a
+-- Wall max_health is read live from the actual entity prototype via the 2.0
+-- API `prototypes.entity[entity_name].get_max_health()` (a METHOD in 2.0, not
+-- a property; the 1.1 `game.entity_prototypes[...].max_health` field access is
+-- gone) rather than a
 -- defenses.lua CONFIG mirror of prototypes/walls.lua's WALL_TIER_HEALTH --
 -- no such mirror exists today, and adding one would be a THIRD source of
 -- truth for the same number. Reading the live prototype instead is the
@@ -322,7 +323,7 @@ function M.get_wall_tier_info()
     info[tier] = {
       tier = tier,
       upgrade_cost = tier_stats.upgrade_cost,
-      max_health = prototype and prototype.max_health or nil,
+      max_health = prototype and prototype.get_max_health() or nil,
     }
   end
   return info
